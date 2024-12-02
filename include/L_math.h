@@ -47,9 +47,7 @@ for(int i=0;i<count;i++){\
 #define CONCATENATE_4(a, b, c, d, delimiter) a delimiter b delimiter c delimiter d
 #define CONCATENATE(delimiter, ...) GET_MACRO(__VA_ARGS__, CONCATENATE_4, CONCATENATE_3, CONCATENATE_2)(__VA_ARGS__, delimiter)
 
-#define INT_HIGHEST_BIT_INDEX(n) __builtin_ctz(n)
-#define LONG_HIGHEST_BIT_INDEX(n) __builtin_ctzl(n)
-#define LONG_LONG_HIGHEST_BIT_INDEX(n) __builtin_ctzll(n)
+#define INT_HIGHEST_BIT_INDEX(n) (31-__builtin_clz(n))
 //从1开始计数
 #define FIRST_1_BIT_COUNT(n) __builtin_ffs(n)
 

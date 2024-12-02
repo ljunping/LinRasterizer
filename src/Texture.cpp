@@ -190,7 +190,7 @@ void Texture::generate_mipmaps()
     mip_maps.clear();
     auto wpt2 = L_MATH::ceil_pot(this->width);
     auto hpt2 = L_MATH::ceil_pot(this->height);
-    auto level = std::max(INT_HIGHEST_BIT_INDEX(this->width),INT_HIGHEST_BIT_INDEX(this->height));
+    auto level = std::max(INT_HIGHEST_BIT_INDEX(wpt2),INT_HIGHEST_BIT_INDEX(hpt2));
     mip_maps.resize(level + 1);
     auto &text_layer = mip_maps[0];
     text_layer.width = wpt2;

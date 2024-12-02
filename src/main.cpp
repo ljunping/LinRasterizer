@@ -19,7 +19,7 @@ void test()
     // }
     scene->clear();
     auto attributes = generate_sphere(3, 10, 10, L_MATH::translate(Vec3{0, 0, -3.5}));
-    auto texture = TEXTURE_MANAGER.create_texture("black_white_box.png", true);
+    auto texture = TEXTURE_MANAGER.create_texture("06489085_2.jpg", true);
     attributes->bind_texture(texture);
     std::vector<TrianglePrimitive> primitives;
     attributes->generate_triangles(primitives);
