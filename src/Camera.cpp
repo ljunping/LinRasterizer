@@ -67,7 +67,7 @@ std::vector<TrianglePrimitive>& Camera::update_proj_triangle_list()
             }
             proj_triangles[i] = *(model_triangles[i]).data;
             proj_triangles[i].update(mvp);
-            if (proj_triangles[i].area() > HUGE_TRIANGLE_THR&&HUB_TRIANGLE_BREAK_COUNT_MAX>0)
+            if (proj_triangles[i].area() > HUGE_TRIANGLE_THR && HUB_TRIANGLE_BREAK_COUNT_MAX > 0)
             {
                 int break_count = HUB_TRIANGLE_BREAK_COUNT_MAX;
                 std::vector<TrianglePrimitive> result;
@@ -75,8 +75,29 @@ std::vector<TrianglePrimitive>& Camera::update_proj_triangle_list()
                 break_huge_triangle(proj_triangles[i], HUGE_TRIANGLE_THR, result, break_count);
                 proj_triangles.insert(proj_triangles.end(), result.begin(), result.end());
             }
-
         }
+    }
+
+
+    if (build_bvh)
+    {
+        if (!bvh_tree)
+        {
+            proj_triangles_ptrs.clear();
+            for (auto& proj_triangle : this->proj_triangles)
+            {
+                if (!proj_triangle.discard)
+                {
+                    proj_triangles_ptrs.emplace_back(&proj_triangle);
+                }
+            }
+            bvh_tree = new BVHTree(proj_triangles_ptrs);
+        }
+        // else
+        // {
+        //     bvh_tree->clear();
+        //     bvh_tree->build(primitives_ptrs);
+        // }
     }
     return proj_triangles;
 }

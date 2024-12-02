@@ -39,12 +39,8 @@ add_executable(LinRasterizer src/main.cpp
         src/Scene.cpp
         src/Scene.h
         src/LinkList.h
-        src/LuaVertShader.cpp
-        src/LuaVertShader.h
-        src/LuaFragShader.cpp
-        src/LuaFragShader.h
-        src/LuaShaderManager.cpp
-        src/LuaShaderManager.h
+        src/FragShader.cpp
+        src/FragShader.h
         src/RenderNode.cpp
         src/RenderNode.h
         src/SceneNode.cpp
@@ -65,6 +61,8 @@ add_executable(LinRasterizer src/main.cpp
         src/DrawUtil.h
         src/Texture.cpp
         src/Texture.h
+        src/Material.cpp
+        src/Material.h
 )
 target_include_directories(LinRasterizer PRIVATE ${X11_INCLUDE_DIR})
 target_include_directories(LinRasterizer PRIVATE ./include)

@@ -21,7 +21,7 @@ int component_name::TYPE_ID=COMPONENT_FACTORY.register_component(component_name:
 #include<unordered_map>
 
 #include "Attribute.h"
-#include "LuaFragShader.h"
+#include "FragShader.h"
 #include "LuaVertShader.h"
 class Component;
 
@@ -60,7 +60,7 @@ class MeshRender : public Component
 {
     INIT_COMPONENT(MeshRender)
     Mesh* mesh;
-    LuaFragShader* lua_frag_shader;
+    FragShader* lua_frag_shader;
     LuaVertShader* lua_vert_shader;
     ~MeshRender() override
     {

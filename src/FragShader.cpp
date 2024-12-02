@@ -2,9 +2,16 @@
 // Created by Lin on 2024/11/16.
 //
 
-#include "LuaFragShader.h"
+#include "FragShader.h"
 
-Color LuaFragShader::run(int frag_index )
+#include "Material.h"
+
+void FragShader::init()
+{
+    material = MATERIAL_MANAGER.get_material(material_id);
+}
+
+Color FragShader::run(int frag_index )
 {
     auto frag = &(*this->fragment_map)[frag_index];
     auto& alpha = frag->alpha;
@@ -16,7 +23,7 @@ Color LuaFragShader::run(int frag_index )
     // v2.get_attribute_value(1, c2);
     // v3.get_attribute_value(1, c3);
     // Vec3 frag_color = c1 * alpha[0] + c2 * alpha[1] + c3 * alpha[2];
-    return color(alpha);
+    return GREEN;
 }
 
 Color TextureFragShader::run(int frag_index)
@@ -25,9 +32,7 @@ Color TextureFragShader::run(int frag_index)
     auto& v1 = frag->triangle->vert[0];
     auto texture = v1.attributes->textures[0];
     Vec4 frag_color;
-    Vec2 uv;
-    frag->vertex_attribute.get_attribute_value(1, uv);
-    this->sample_texture(frag_index, texture, 1, frag_color);
+    this->sample_texture(frag_index, texture, this->text_attribute_index, frag_color);
     return color(frag_color);
 }
 

@@ -7,7 +7,7 @@
 #include "L_math.h"
 #include "Attribute.h"
 #include "Component.h"
-#include "LuaFragShader.h"
+#include "FragShader.h"
 #include "LuaVertShader.h"
 
 

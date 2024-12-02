@@ -14,7 +14,7 @@
 #include<X11/Xlib.h>
 const int target_fps = 60; // 目标帧率
 const int frame_duration = 1000 / target_fps; // 每帧持续时间（毫秒）
-static bool enable_ray_cast=false;
+
 
 WindowHandle::WindowHandle() : display(nullptr), window(0),screen(0), x(0), y(0), w(800), h(600) {}
 
@@ -32,12 +32,13 @@ void WindowHandle::on_key_event(int keysym)
     static int __ID = 0;
     if (keysym == XK_1) // 如果按下的是1
     {
-        enable_ray_cast = true;
+        rast->enable_ray_cast = !rast->enable_ray_cast;
     }
-    if (keysym == XK_2) // 如果按下的是2
+    if (keysym == XK_2) // 如果按下的是1
     {
-        enable_ray_cast = false;
+        rast->camera->build_bvh = !rast->camera->build_bvh;
     }
+
     if (keysym == XK_3) // 如果按下的是2
     {
         rast->scene->clear();
@@ -143,6 +144,7 @@ void WindowHandle::on_resize(int _w, int _h)
 
 void WindowHandle::game_logic(float t)
 {
+
     // static auto camera_pos = rast->camera->pos;
     // static auto look_dir = rast->camera->look_dir;
     // rast->camera->pos = (camera_pos + Vec3({
@@ -152,21 +154,17 @@ void WindowHandle::game_logic(float t)
 
 }
 
-void WindowHandle::render()
+void WindowHandle::render_scene()
 {
     rast->draw_begin();
     rast->clear_color(reinterpret_cast<Color*>(image_buff->data), background_color);
-    if (enable_ray_cast)
-    {
-        rast->ray_cast_scene();
-    }else
-    {
-        rast->raster_scene();
-    }
+    rast->raster_scene();
     rast->render_fragment(reinterpret_cast<Color*>(image_buff->data));
     rast->draw_end();
-    draw_frame_buff();
+    rast->draw_after_scene(reinterpret_cast<Color*>(image_buff->data));
+    this->draw_frame_buff();
 }
+
 
 void WindowHandle::open() {
     display = XOpenDisplay(NULL);
@@ -189,7 +187,7 @@ void WindowHandle::open() {
 
         event_loop();
         game_logic(t);
-        render();
+        render_scene();
 
         TIME_RUN_END()
         t = std::chrono::duration_cast<std::chrono::milliseconds>(frame_end - start_time).count() * 1.0f / 1000.f;

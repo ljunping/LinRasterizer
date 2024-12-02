@@ -4,11 +4,9 @@
 
 #ifndef TEXTURE_H
 #define TEXTURE_H
-#include <unordered_map>
-
 #include "L_math.h"
 #include "TrianglePrimitive.h"
-
+#define MAX_TEXTURES 8
 struct TextureLayer
 {
     int width;
@@ -41,11 +39,11 @@ public:
 
 class TextureManager
 {
-    std::unordered_map<int, Texture *> textures;
+    Texture* textures[MAX_TEXTURES];
     int textureID;
 public:
+    Texture* get_texture(int id);
     TextureManager();
-    Texture *get_texture(int id);
     int create_texture(const char* fileName,bool generate_mipmap);
     void destroy_texture(int id);
     void sample(int texture_id, const L_MATH::Vec<float, 2>& uv, const L_MATH::Vec<float, 2>& lod, unsigned char* result);

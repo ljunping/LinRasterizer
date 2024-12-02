@@ -9,15 +9,23 @@
 #include "Color.h"
 #include "Rasterizer.h"
 #include "Texture.h"
-class LuaFragShader
+
+
+class Material;
+struct UniformInterface;
+
+class FragShader
 {
 public:
-    LuaFragShader() = default;
+    FragShader() = default;
+    int material_id{};
+    Material* material{};
+    void init();
     std::vector<Fragment>* fragment_map;
     int ox,sx,oy,sy;
     int width, height;
     virtual Color run(int frag_index);
-    virtual ~LuaFragShader() = default;
+    virtual ~FragShader() = default;
     template<int N>
     void ddx(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result);
     template <int N>
@@ -28,13 +36,14 @@ public:
     void sample_texture(int frag_index, int texture_id, int uv_attribute_index, L_MATH::Vec<float, N> &result);
 };
 
-class TextureFragShader : public LuaFragShader
+class TextureFragShader : public FragShader
 {
 public:
+    int text_attribute_index;
     Color run(int frag_index) override;
 };
 template <int N>
-void LuaFragShader::ddx(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result)
+void FragShader::ddx(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result)
 {
     L_MATH::Vec<float, N> result2;
     df(frag_index, frag_index + 1, attribute_index, result);
@@ -44,7 +53,7 @@ void LuaFragShader::ddx(int frag_index, int attribute_index, L_MATH::Vec<float, 
 }
 
 template <int N>
-void LuaFragShader::ddy(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result)
+void FragShader::ddy(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result)
 {
     L_MATH::Vec<float, N> result2;
     df(frag_index, frag_index + width, attribute_index, result);
@@ -54,7 +63,7 @@ void LuaFragShader::ddy(int frag_index, int attribute_index, L_MATH::Vec<float, 
 }
 
 template <int N>
-void LuaFragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_MATH::Vec<float, N> &result)
+void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_MATH::Vec<float, N> &result)
 {
     auto &fragments = *fragment_map;
     if (frag_index_l < 0 || frag_index_l >= fragments.size() || frag_index_r < 0 || frag_index_r >= fragments.size())
@@ -78,7 +87,7 @@ void LuaFragShader::df(int frag_index_l, int frag_index_r, int attribute_index, 
 }
 
 template <int N>
-void LuaFragShader::sample_texture(int frag_index,int texture_id, int uv_attribute_index, L_MATH::Vec<float, N> &result)
+void FragShader::sample_texture(int frag_index,int texture_id, int uv_attribute_index, L_MATH::Vec<float, N> &result)
 {
     Vec2 dx, dy;
     Vec2 uv;
@@ -95,7 +104,7 @@ void LuaFragShader::sample_texture(int frag_index,int texture_id, int uv_attribu
     unsigned char _res[N];
     lod[0]= L_MATH::dot(dx, dx);
     lod[1] = L_MATH::dot(dy, dy);
-    TEXTURE_MANAGER.sample(texture_id, uv, lod, _res);
+    TEXTURE_MANAGER.sample(texture_id, uv, 0, _res);
     for (int i = 0; i < N; ++i)
     {
         result[i] = float(_res[i]) / float(255);

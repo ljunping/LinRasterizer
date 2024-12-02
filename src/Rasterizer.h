@@ -20,7 +20,7 @@
 struct RayCasterWork;
 struct Work;
 class WindowHandle;
-class LuaFragShader;
+class FragShader;
 struct FragShaderWork;
 struct ClearWork;
 
@@ -33,24 +33,21 @@ struct  Fragment
     VertexAttribute vertex_attribute;
 };
 
-struct RayCasterResult
-{
-    TrianglePrimitive* triangle = nullptr;
-    Vec3 alpha;
-    float z;
-};
+
 
 
 class Rasterizer
 {
 private:
     bool enable_depth = true;
-    LuaFragShader* frag_shader{};
+    FragShader* frag_shader{};
     int frame_begin_job_id = 0;
     int frame_cur_max_job_id = 0;
     void update_frame_job_id(int job_group_id);
 
 public:
+    bool enable_ray_cast = false;
+    std::vector<std::tuple<void(*)(Rasterizer* rasterizer, Color* buff, void* data), void*>> after_scene_render_funcs;
     int w, h;
     int thread_tile_size=64;
     std::vector<Fragment> fragment_map;
@@ -60,7 +57,7 @@ public:
     std::vector<ClearWork> clear_works;
     Scene* scene{};
     Camera* camera{};
-    Rasterizer(Scene* scene, Camera* camera, LuaFragShader*);
+    Rasterizer(Scene* scene, Camera* camera, FragShader*);
     ~Rasterizer();
     int ray_cast_scene();
     int render_fragment(Color*);
@@ -70,6 +67,10 @@ public:
     bool is_render_job_finish(int job_group_id) const;
     void draw_begin();
     void draw_end();
+    void draw_after_scene(Color* buff);
+    void register_after_scene_render_func(void (*func)(Rasterizer* rasterizer, Color* buff, void* data), void* data);
+    void unregister_after_scene_render_func(void(*func)(Rasterizer* rasterizer, Color* buff, void* data),void *data);
+
     void on_window_resize(int w, int h);
 };
 

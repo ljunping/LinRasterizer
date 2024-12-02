@@ -36,7 +36,7 @@ public:
     void event_loop();
     void on_resize(int _w, int _h);
     void game_logic(float t);
-    void render();
+    void render_scene();
     void open();
     void close();
     void resize(int x, int y) const;

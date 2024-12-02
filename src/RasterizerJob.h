@@ -12,11 +12,10 @@
 #define THREAD_MVP_SIZE 10000
 inline float HUGE_TRIANGLE_THR = 0.5;
 inline int HUB_TRIANGLE_BREAK_COUNT_MAX = 0;
-inline int CCW[] = {0, 1, 2, 1, 2, 0, 2, 0, 1};
-inline int MID_FILTER_SIZE = 3;
+inline constexpr int CCW[] = {0, 1, 2, 1, 2, 0, 2, 0, 1};
 
 class Rasterizer;
-class LuaFragShader;
+class FragShader;
 class RayCasterResult;
 enum WORK_TYPE
 {
@@ -48,7 +47,7 @@ struct FragShaderWork
 {
     Work base;
     Color* buffer;
-    LuaFragShader* frag_shader;
+    FragShader* frag_shader;
 };
 
 inline void view_transform(const int w, const int h, float st_x, float st_y, int& i,
@@ -89,6 +88,9 @@ inline void vert_view_transform(const Mat44& mvp, const int w, const int h, Vert
 bool add_fragment(TrianglePrimitive& tri, Rasterizer* rasterizer, L_MATH::Vec<float, 3>& alpha, int i, int j);
 
 bool ray_caster(Camera* camera, float si, float sj, RayCasterResult* result);
+bool ray_caster_bvh(Camera* camera, float si, float sj, RayCasterResult* result);
+bool ray_caster_bvh_priqueue(Camera* camera, float si, float sj, RayCasterResult* result);
+
 void rast_tri(TrianglePrimitive& tri, Rasterizer* rasterizer);
 void break_huge_triangle(TrianglePrimitive& tri, float area_thr, std::vector<TrianglePrimitive>& result, int& count);
 

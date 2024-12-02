@@ -6,6 +6,7 @@
 #include <__format/format_functions.h>
 #include "Camera.h"
 #include "debug.h"
+#include "Rasterizer.h"
 
 Vec3 TrianglePrimitive::st_box_plane_normal[6] = {
     Vec3{0, 0, 1},
@@ -33,7 +34,6 @@ TrianglePrimitive::TrianglePrimitive(VertexAttribute& v0, VertexAttribute& v1, V
     inv_w = Vec3::ONE;
 }
 
-
 bool TrianglePrimitive::ccw() const
 {
     return inv_cross_dir_z > 0;
@@ -51,7 +51,7 @@ float TrianglePrimitive::area() const
 
 bool TrianglePrimitive::inside(const L_MATH::Vec<float, 3>& point) const
 {
-    if (!box.inside_2d(point))
+    if (!box.inside<2>(point))
     {
         return false;
     }
@@ -73,12 +73,24 @@ float TrianglePrimitive::intersect_plane(const L_MATH::Vec<float, 3>& point,cons
     float t =  L_MATH::intersect_plane(point, dir, normal_dir, d);;
     return t;
 }
-
-
-bool TrianglePrimitive::intersect_triangle(const L_MATH::Vec<float, 3>& point,const Vec3& dir) const
+//三角形基元已经投影变换
+bool TrianglePrimitive::intersect_3D(const L_MATH::Vec<float, 3>& point, const L_MATH::Vec<float, 3>& dir,
+    RayCasterResult* result)
 {
-    float t = intersect_plane(point, dir);
-    return t >= 0 && inside(point + L_MATH::FORWARD * t);
+    barycentric(point, result->alpha);
+    result->triangle = this;
+    return is_same_sign(result->alpha);
+    // result->t = intersect_plane(point, dir);
+    // barycentric(point + dir * result->t, result->alpha);
+    // result->triangle = this;
+    // return is_same_sign(result->alpha);
+}
+
+bool TrianglePrimitive::intersect_2D(const L_MATH::Vec<float, 3>& point, RayCasterResult* result)
+{
+    barycentric(point, result->alpha);
+    result->triangle = this;
+    return is_same_sign(result->alpha);
 }
 
 
@@ -116,7 +128,7 @@ void TrianglePrimitive::update_param()
     cache_area = cross_dir.sqrt_magnitude() / 2;
     normal_dir = cross_dir.normalize();
     d = normal_dir.dot(v[0]);
-    if(L_MATH::is_zero(cross_dir[2])||L_MATH::is_zero(normal_dir[2]))
+    if (L_MATH::is_zero(cross_dir[2]) || L_MATH::is_zero(normal_dir[2]))
     {
         discard = true;
         return;
@@ -148,7 +160,7 @@ void TrianglePrimitive::clip()
     bool is_inside[3];
     for (int i = 0; i < 3; ++i)
     {
-        is_inside[i]=st_box.inside_3d(v[i]);
+        is_inside[i]=st_box.inside<3>(v[i]);
         if (!is_inside[i])
         {
             need_clip = true;

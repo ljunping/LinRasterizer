@@ -4,10 +4,10 @@
 
 #ifndef DRAWUTIL_H
 #define DRAWUTIL_H
-#include <vector>
-
-#include "TrianglePrimitive.h"
-
+#include "BresenhamLine.h"
+#include "Attribute.h"
+#include "Color.h"
+#include "Rasterizer.h"
 inline Attributes* generate_sphere(float radius, int stacks, int slices, const Mat44& mat)
 {
     float* vert_buff = new float[5 * (stacks + 1) * (slices + 1)];
@@ -26,8 +26,8 @@ inline Attributes* generate_sphere(float radius, int stacks, int slices, const M
             vert_buff[5 * (stack * (slices + 1) + slice)] = var1[0];
             vert_buff[5 * (stack * (slices + 1) + slice) + 1] = var1[1];
             vert_buff[5 * (stack * (slices + 1) + slice) + 2] = var1[2];
-            vert_buff[5 * (stack * (slices + 1) + slice) + 3] =abs( sin(phi) * sin(theta));
-            vert_buff[5 * (stack * (slices + 1) + slice) + 4] = abs(sin(phi) * cos(theta));
+            vert_buff[5 * (stack * (slices + 1) + slice) + 3] = stack*1.0 / stacks;
+            vert_buff[5 * (stack * (slices + 1) + slice) + 4] = slice*1.0 / slices;
         }
     }
     auto _Attributes = new Attributes(vert_buff, 5 * (stacks + 1) * (slices + 1));
@@ -84,6 +84,27 @@ inline  void generate_quad(const Mat44& mat, std::vector<TrianglePrimitive>& res
     std::vector<int> ebo = {0, 1, 2, 2, 3, 0};
     _Attributes->generate_triangles(ebo, result);
 }
+struct DrawLineInfo
+{
+    int x0, y0, x1, y1;
+    Color color;
+};
 
+inline void draw_line(Rasterizer* rasterizer, Color* buff, void* data)
+{
+    auto w = rasterizer->w;
+    auto h = rasterizer->h;
+    auto line = (DrawLineInfo*)data;
+    auto bresenham_line = BresenhamLine(line->x0, line->y0, line->x1, line->y1);
+    int x, y,mx,my;
+    x = line->x0;
+    y = line->y0;
+    buff[y * w + x] = line->color;
+    while (bresenham_line.has_next())
+    {
+        bresenham_line.next_point(x, y, mx, my);
+        buff[y * w + x] = line->color;
+    }
+}
 
 #endif //DRAWUTIL_H

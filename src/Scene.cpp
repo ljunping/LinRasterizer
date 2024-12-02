@@ -52,7 +52,7 @@ int Scene::add_attributes(Attributes *attrs)
     this->add_origin_triangles(tris);
 }
 
-int Scene::add_origin_triangles(std::vector<TrianglePrimitive>& tris)
+void Scene::add_origin_triangles(std::vector<TrianglePrimitive>& tris)
 {
     for (auto& tri : tris)
     {

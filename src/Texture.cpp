@@ -293,10 +293,6 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *
 
 Texture * TextureManager::get_texture(int id)
 {
-    if (!textures.contains(id))
-    {
-        return nullptr;
-    }
     return textures[id];
 }
 
@@ -307,6 +303,10 @@ TextureManager::TextureManager():
 
 int TextureManager::create_texture(const char* fileName,bool generate_mipmap)
 {
+    if (this->textureID >= MAX_TEXTURES)
+    {
+        throw std::runtime_error("TextureManager::create_texture: texture id exceeded");
+    }
     int width;
     int height;
     int channels;
@@ -331,12 +331,8 @@ int TextureManager::create_texture(const char* fileName,bool generate_mipmap)
 
 void TextureManager::destroy_texture(int id)
 {
-    if (textures.contains(id))
-    {
-        auto texture = textures[id];
-        textures.erase(texture->id);
-        delete texture;
-    }
+    auto texture = textures[id];
+    delete texture;
 }
 
 

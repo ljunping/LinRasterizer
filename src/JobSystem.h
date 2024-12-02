@@ -14,7 +14,6 @@
 struct JobGroup;
 
 inline void default_complete(int begin, int end, void* global){};
-
 struct Job
 {
     int data_begin;

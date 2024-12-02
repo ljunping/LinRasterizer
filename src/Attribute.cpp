@@ -48,19 +48,28 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
         int offset = 0;
         for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
         {
-
+            if (i == 0)
+            {
+                offset = 0;
+            }
             data.push_back(mesh->mVertices[i].x);
             data.push_back(mesh->mVertices[i].y);
             data.push_back(mesh->mVertices[i].z);
-            attribute_data_formats.emplace_back(POS, 3, 0, 0);
-            offset = offset + 3;
+            if (i == 0)
+            {
+                attribute_data_formats.emplace_back(POS, 3, offset, 0);
+                offset = offset + 3;
+            }
             if (mesh->mNormals)
             {
                 data.push_back(mesh->mNormals[i].x);
                 data.push_back(mesh->mNormals[i].y);
                 data.push_back(mesh->mNormals[i].z);
-                attribute_data_formats.emplace_back(NORMAL, 3, offset, 0);
-                offset = offset + 3;
+                if(i==0)
+                {
+                    attribute_data_formats.emplace_back(NORMAL, 3, offset, 0);
+                    offset = offset + 3;
+                }
             }
             for (int j = 0; j < AI_MAX_NUMBER_OF_COLOR_SETS; ++j)
             {
@@ -70,8 +79,11 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
                     data.push_back(mesh->mColors[j][i].g);
                     data.push_back(mesh->mColors[j][i].b);
                     data.push_back(mesh->mColors[j][i].a);
-                    attribute_data_formats.emplace_back(COLOR, 4, offset, 0);
-                    offset = offset + 4;
+                    if(i==0)
+                    {
+                        attribute_data_formats.emplace_back(COLOR, 4, offset, 0);
+                        offset = offset + 4;
+                    }
                 }
             }
             for (int j = 0; j < AI_MAX_NUMBER_OF_TEXTURECOORDS; ++j)
@@ -80,8 +92,11 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
                 {
                     data.push_back(mesh->mTextureCoords[j][i].x);
                     data.push_back(mesh->mTextureCoords[j][i].y);
-                    attribute_data_formats.emplace_back(UV, 2, offset, 0);
-                    offset = offset + 2;
+                    if(i==0)
+                    {
+                        attribute_data_formats.emplace_back(UV, 2, offset, 0);
+                        offset = offset + 2;
+                    }
                 }
             }
             if (mesh->mTangents)
@@ -89,8 +104,11 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
                 data.push_back(mesh->mTangents[i].x);
                 data.push_back(mesh->mTangents[i].y);
                 data.push_back(mesh->mTangents[i].z);
-                attribute_data_formats.emplace_back(TANGENT, 3, offset, 0);
-                offset = offset + 3;
+                if(i==0)
+                {
+                    attribute_data_formats.emplace_back(TANGENT, 3, offset, 0);
+                    offset = offset + 3;
+                }
             }
         }
 
@@ -108,6 +126,10 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
         for (int i = 0; i < data.size(); i++)
         {
             data_p[i] = data[i];
+        }
+        for (auto& attribute_data_format : attribute_data_formats)
+        {
+            attribute_data_format.stride = offset;
         }
         attributeses[index].vbo = data_p;
         attributeses[index].data_size = data.size();
@@ -154,9 +176,7 @@ void Attributes::generate_triangles(std::vector<TrianglePrimitive>& result) cons
         for (int i = 0; i < vert_count; i = i + 3)
         {
             auto& triangle_primitive = result.emplace_back();
-#if DEBUG
             triangle_primitive.id = i/3;
-#endif
             generate_triangle(i, i + 1, i + 2, triangle_primitive);
         }
     }else
@@ -179,12 +199,12 @@ void Attributes::generate_triangle(int v0, int v1, int v2,TrianglePrimitive& res
 
 void Attributes::generate_triangles(const std::vector<int>& ebo, std::vector<TrianglePrimitive>& result) const
 {
+    int max_v = 0;
     for (int i = 0; i < ebo.size(); i = i + 3)
     {
+        max_v = fmax(ebo[i], max_v);
         auto& triangle_primitive = result.emplace_back();
-#if DEBUG
         triangle_primitive.id = i/3;
-#endif
         generate_triangle(ebo[i], ebo[i+1], ebo[i+2], triangle_primitive);
     }
 }

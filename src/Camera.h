@@ -7,17 +7,19 @@
 #include "L_math.h"
 #include "Scene.h"
 #include "TrianglePrimitive.h"
-
-
+#include "Box3D.h"
 
 class Camera
 {
     bool is_proj;
 public:
     Scene* scene;
+    bool build_bvh;
     Mat44 view_mat;
     Mat44 projection_mat;
+    BVHTree* bvh_tree = nullptr;
     std::mutex proj_triangles_mutex;
+    std::vector<TrianglePrimitive*> proj_triangles_ptrs;
     std::vector<TrianglePrimitive> proj_triangles;
     void update_view_mat();
     void update_projection_mat();

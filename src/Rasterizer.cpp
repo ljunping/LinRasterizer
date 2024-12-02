@@ -33,7 +33,7 @@ void Rasterizer::update_frame_job_id(int job_group_id)
     frame_cur_max_job_id = std::max(frame_cur_max_job_id, job_group_id);
 }
 
-Rasterizer::Rasterizer(Scene* scene, Camera* camera, LuaFragShader* frag_shader): scene(scene), camera(camera),
+Rasterizer::Rasterizer(Scene* scene, Camera* camera, FragShader* frag_shader): scene(scene), camera(camera),
                                                                                   frag_shader(frag_shader)
 {
 }
@@ -141,6 +141,10 @@ int Rasterizer::clear_color(Color* data, Color color)
 
 int Rasterizer::raster_scene()
 {
+    if (enable_ray_cast)
+    {
+        return ray_cast_scene();
+    }
     auto& proj_triangle_list = camera->proj_triangles;
     auto tri_count = proj_triangle_list.size();
     if (tri_count == 0)
@@ -177,7 +181,6 @@ bool Rasterizer::is_render_job_finish(int job_group_id) const
 void Rasterizer::draw_begin()
 {
     camera->update_proj_triangle_list();
-
     frame_cur_max_job_id = 0;
     frame_begin_job_id = 0;
 }
@@ -186,6 +189,38 @@ void Rasterizer::draw_end()
 {
     wait_render_finish();
 }
+
+void Rasterizer::draw_after_scene(Color* buff)
+{
+    for (auto after_scene_render_func : after_scene_render_funcs)
+    {
+        auto func = std::get<0>(after_scene_render_func);
+        auto data = std::get<1>(after_scene_render_func);
+        func(this, buff, data);
+    }
+
+}
+
+void Rasterizer::register_after_scene_render_func(void(* func)(Rasterizer* rasterizer, Color* buff, void* data),void *data)
+{
+    this->after_scene_render_funcs.emplace_back(func, data);
+}
+
+void Rasterizer::unregister_after_scene_render_func(void(* func)(Rasterizer* rasterizer, Color* buff, void* data),
+    void* data)
+{
+    for (auto begin = after_scene_render_funcs.begin(); begin != after_scene_render_funcs.end(); ++begin)
+    {
+        if (*std::get<0>(*begin) == func && std::get<1>(*begin) == data)
+        {
+            after_scene_render_funcs.erase(begin);
+            return;
+        }
+    }
+}
+
+
+
 
 
 

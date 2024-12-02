@@ -25,10 +25,9 @@ public:
     ~Scene();
     void update_model_matrix(const Mat44& mat);
     int add_origin_triangle(TrianglePrimitive& tri);
-    int add_origin_triangles(std::vector<TrianglePrimitive>& tris);
+    void add_origin_triangles(std::vector<TrianglePrimitive>& tris);
     int add_origin_triangles(std::vector<TrianglePrimitive*>& tris);
     int add_attributes(Attributes* attrs);
-
 
     void remove_origin_triangle(int id);
     void clear();
