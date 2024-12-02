@@ -1,3 +1,0 @@
-/Users/lin/Desktop/Project/opengL/LinRasterizer/cmake-build-debug/CMakeFiles/LinRasterizer.dir
-/Users/lin/Desktop/Project/opengL/LinRasterizer/cmake-build-debug/CMakeFiles/edit_cache.dir
-/Users/lin/Desktop/Project/opengL/LinRasterizer/cmake-build-debug/CMakeFiles/rebuild_cache.dir
