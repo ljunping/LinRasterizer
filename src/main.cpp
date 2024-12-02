@@ -18,7 +18,7 @@ void test()
     //     mesh.bind_texture(texture);
     // }
     scene->clear();
-    auto attributes = generate_sphere(3, 30, 30, L_MATH::translate(Vec3{0, 0, -3.5}));
+    auto attributes = generate_sphere(3, 10, 10, L_MATH::translate(Vec3{0, 0, -3.5}));
     auto texture = TEXTURE_MANAGER.create_texture("black_white_box.png", true);
     attributes->bind_texture(texture);
     std::vector<TrianglePrimitive> primitives;

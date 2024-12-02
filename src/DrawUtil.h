@@ -26,8 +26,8 @@ inline Attributes* generate_sphere(float radius, int stacks, int slices, const M
             vert_buff[5 * (stack * (slices + 1) + slice)] = var1[0];
             vert_buff[5 * (stack * (slices + 1) + slice) + 1] = var1[1];
             vert_buff[5 * (stack * (slices + 1) + slice) + 2] = var1[2];
-            vert_buff[5 * (stack * (slices + 1) + slice) + 3] = slice * 1.0 / slices;
-            vert_buff[5 * (stack * (slices + 1) + slice) + 4] = stack * 1.0 / stacks;
+            vert_buff[5 * (stack * (slices + 1) + slice) + 3] =abs( sin(phi) * sin(theta));
+            vert_buff[5 * (stack * (slices + 1) + slice) + 4] = abs(sin(phi) * cos(theta));
         }
     }
     auto _Attributes = new Attributes(vert_buff, 5 * (stacks + 1) * (slices + 1));
