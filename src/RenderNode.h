@@ -8,7 +8,6 @@
 #include "Attribute.h"
 #include "Component.h"
 #include "FragShader.h"
-#include "LuaVertShader.h"
 
 
 class RenderNode {

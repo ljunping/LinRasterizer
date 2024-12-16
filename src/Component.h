@@ -22,7 +22,6 @@ int component_name::TYPE_ID=COMPONENT_FACTORY.register_component(component_name:
 
 #include "Attribute.h"
 #include "FragShader.h"
-#include "LuaVertShader.h"
 class Component;
 
 class ComponentFactory
@@ -61,12 +60,10 @@ class MeshRender : public Component
     INIT_COMPONENT(MeshRender)
     Mesh* mesh;
     FragShader* lua_frag_shader;
-    LuaVertShader* lua_vert_shader;
     ~MeshRender() override
     {
         delete mesh;
         delete lua_frag_shader;
-        delete lua_vert_shader;
     }
 };
 
