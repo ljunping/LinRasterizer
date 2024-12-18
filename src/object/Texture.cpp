@@ -9,11 +9,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image/stb/stb_image.h"
 
-Texture::Texture():data(nullptr), id(0)
-{
-}
-
-static void execute_init_lay0_mipmap(int begin, int end, void *global)
+static void execute_init_lay0_mipmap(size_t begin, size_t end, void *global)
 {
     Texture *texture = (Texture *)global;
     auto& mip_map_layer = texture->mip_maps[0];
@@ -34,8 +30,8 @@ static void execute_init_lay0_mipmap(int begin, int end, void *global)
         float alpha_x = x - x0;
         float alpha_y = y - y0;
         L_MATH::alpha4(alpha_x, alpha_y, alpha);
-        texture->texture_raw(x0, x0, tx0);
-        texture->texture_raw(x0 + 1, x0, tx1);
+        texture->texture_raw(x0, y0, tx0);
+        texture->texture_raw(x0 + 1, y0, tx1);
         texture->texture_raw(x0, y0 + 1, tx2);
         texture->texture_raw(x0 + 1, y0 + 1, tx3);
         for (int k = 0; k < channels; ++k)
@@ -45,7 +41,7 @@ static void execute_init_lay0_mipmap(int begin, int end, void *global)
     }
 }
 
-void execute_init_lay_mipmap(int data_begin, int data_end, void * global_data)
+void execute_init_lay_mipmap(size_t data_begin, size_t data_end, void * global_data)
 {
     auto *data = (std::tuple<Texture *, int> *)(global_data);
     Texture* texture = std::get<0>(*data);
@@ -76,10 +72,6 @@ void execute_init_lay_mipmap(int data_begin, int data_end, void * global_data)
 
 Texture::~Texture()
 {
-    if(this->data)
-    {
-        free(this->data);
-    }
     for (auto mip_map : mip_maps)
     {
         free(mip_map.data);
@@ -91,7 +83,7 @@ Texture::~Texture()
 void Texture::texture_raw(int x, int y, const unsigned char *&result)
 {
     int index = std::max(std::min(y * width + x, width * height - 1), 0) * this->channels;
-    result = (data + index);
+    result = (data.get() + index);
 }
 
 void Texture::texture_mipmap_minify(int x, int y, int level, const unsigned char *&result)
@@ -196,20 +188,13 @@ void Texture::generate_mipmaps()
     text_layer.width = wpt2;
     text_layer.height = hpt2;
     int lay0_fence = 0;
-
-    if (wpt2 == this->width && hpt2 == this->height)
-    {
-        text_layer.data = data;
-    }else
-    {
-        auto *mip_map_0 = static_cast<unsigned char *>(malloc(wpt2 * hpt2 * this->channels));
-        text_layer.data = mip_map_0;
-        lay0_fence = JOB_SYSTEM.create_job_group(0);
-        JOB_SYSTEM.alloc_jobs(lay0_fence, 0, 0, wpt2 * hpt2, this, execute_init_lay0_mipmap, default_complete);
-        JOB_SYSTEM.submit_job_group(lay0_fence);
-    }
+    auto* mip_map_0 = static_cast<unsigned char*>(malloc(wpt2 * hpt2 * this->channels));
+    text_layer.data = mip_map_0;
+    lay0_fence = JOB_SYSTEM.create_job_group(0);
+    JOB_SYSTEM.alloc_jobs(lay0_fence, 0, 0, wpt2 * hpt2, this, execute_init_lay0_mipmap, default_complete);
+    JOB_SYSTEM.submit_job_group(lay0_fence);
     int lay_pre_fence = lay0_fence;
-    std::tuple<Texture *, int> *global_data = new std::tuple<Texture *, int>[level - 1];
+    std::tuple<Texture *, int> *global_data = new std::tuple<Texture *, int>[level];
     for (int i = 0; i < level; ++i)
     {
         std::get<0>(global_data[i]) = this;
@@ -260,6 +245,30 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, const Vec2 &lodv, unsigned
     sample(uv, lod, result);
 }
 
+Texture::Texture(const char* fileName,bool generate_mipmap)
+{
+    int width;
+    int height;
+    int channels;
+    unsigned char* imageData = stbi_load(fileName, &width, &height, &channels, 0);
+    if (!imageData)
+    {
+        printf("Failed to load texture %s\n", fileName);
+    }
+    SHARE_PTR<unsigned char[]> data(imageData, [](unsigned char *ptr)
+    {
+        stbi_image_free(ptr);
+    });
+    this->height = height;
+    this->width = width;
+    this->channels = channels;
+    this->data = data;
+    if(generate_mipmap)
+    {
+        this->generate_mipmaps();
+    }
+}
+
 void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *result)
 {
     if (lod <= 0)
@@ -291,68 +300,9 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *
     }
 }
 
-Texture * TextureManager::get_texture(int id)
-{
-    return textures[id];
-}
-
-TextureManager::TextureManager():
-    textureID(0)
-{
-}
-
-int TextureManager::create_texture(const char* fileName,bool generate_mipmap)
-{
-    if (this->textureID >= MAX_TEXTURES)
-    {
-        throw std::runtime_error("TextureManager::create_texture: texture id exceeded");
-    }
-    int width;
-    int height;
-    int channels;
-    unsigned char* imageData = stbi_load(fileName, &width, &height, &channels, 0);
-    if (!imageData)
-    {
-        printf("Failed to load texture %s\n", fileName);
-    }
-    Texture *texture = new Texture();
-    texture->height = height;
-    texture->width = width;
-    texture->channels = channels;
-    texture->data = imageData;
-    texture->id = ++textureID;
-    textures[texture->id] = texture;
-    if(generate_mipmap)
-    {
-        texture->generate_mipmaps();
-    }
-    return texture->id;
-}
-
-void TextureManager::destroy_texture(int id)
-{
-    auto texture = textures[id];
-    delete texture;
-}
 
 
-void TextureManager::sample(int texture_id,const L_MATH::Vec<float, 2> &uv, const Vec2& lod, unsigned char *result)
-{
-    auto texture = get_texture(texture_id);
-    if (texture)
-    {
-        texture->sample((Vec2)uv, lod, result);
-    }
-}
 
-void TextureManager::sample(int texture_id,const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *result)
-{
-    auto texture = get_texture(texture_id);
-    if (texture)
-    {
-        texture->sample((Vec2)uv, lod, result);
-    }
-}
 
 
 

@@ -10,33 +10,33 @@
 #include <X11/Xlib.h>
 #endif
 #include "Color.h"
+#include "Context.h"
 #include "L_math.h"
-#include "Rasterizer.h"
 
+#define MAX_FRAME_BUFFERS 2
 class WindowHandle
 {
-
 #ifdef WINDOW_X11
     Display* display;
     ::Window window;
-    XImage* image_buff;
     int screen;
 #endif
 #ifdef WINDOW_COCOA
     void* window;
 #endif
+
 public:
-    int x,y,w,h;
-    Rasterizer* rast;
+#ifdef WINDOW_X11
+    XImage* frame_buffs[MAX_FRAME_BUFFERS];
+    XImage* default_frame_buff{};
+#endif
+    int x, y, w, h;
     Color background_color = BLACK;
-    WindowHandle();
-    WindowHandle(int x, int y, int w, int h, Rasterizer* rasterizer);
+    WindowHandle(int x, int y, int w, int h);
     ~WindowHandle();
-    void on_key_event(int key);
     void event_loop();
     void on_resize(int _w, int _h);
-    void game_logic(float t);
-    void render_scene();
+    void on_key_event(int key);
     void open();
     void close();
     void resize(int x, int y) const;
@@ -46,6 +46,7 @@ public:
     void set_pixel(int x, int y, Color color) const;
     void draw_frame_buff() const;
     void clear(Color color) const;
+    Color* get_frame_buff(int frame_buff_id);
 };
 
 

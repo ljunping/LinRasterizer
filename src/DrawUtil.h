@@ -5,10 +5,9 @@
 #ifndef DRAWUTIL_H
 #define DRAWUTIL_H
 #include "BresenhamLine.h"
-#include "Attribute.h"
+#include "Mesh.h"
 #include "Color.h"
-#include "Rasterizer.h"
-inline Attributes* generate_sphere(float radius, int stacks, int slices, const Mat44& mat)
+inline Mesh* generate_sphere(float radius, int stacks, int slices, const Mat44& mat)
 {
     float* vert_buff = new float[5 * (stacks + 1) * (slices + 1)];
     // Generate vertices
@@ -30,7 +29,8 @@ inline Attributes* generate_sphere(float radius, int stacks, int slices, const M
             vert_buff[5 * (stack * (slices + 1) + slice) + 4] = slice*1.0 / slices;
         }
     }
-    auto _Attributes = new Attributes(vert_buff, 5 * (stacks + 1) * (slices + 1));
+    SHARE_PTR<float[]> share_vert_buff(vert_buff);
+    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 5 * (stacks + 1) * (slices + 1));
     _Attributes->bind_attribute(POS,3, 0, 5);
     _Attributes->bind_attribute(COLOR,2, 3, 5);
     std::vector<int> eb0;
@@ -78,7 +78,9 @@ inline  void generate_quad(const Mat44& mat, std::vector<TrianglePrimitive>& res
         vert_buff[6 * i + 4] = 1;
         vert_buff[6 * i + 5] = 1;
     }
-    auto _Attributes = new Attributes(vert_buff, 24);
+    SHARE_PTR<float[]> share_vert_buff(vert_buff);
+
+    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 24);
     _Attributes->bind_attribute(POS,3, 0, 6);
     _Attributes->bind_attribute(COLOR,3, 3, 6);
     std::vector<int> ebo = {0, 1, 2, 2, 3, 0};
@@ -90,10 +92,10 @@ struct DrawLineInfo
     Color color;
 };
 
-inline void draw_line(Rasterizer* rasterizer, Color* buff, void* data)
+inline void draw_line(Context* ctx, Color* buff, void* data)
 {
-    auto w = rasterizer->w;
-    auto h = rasterizer->h;
+    auto w = ctx->window_handle->w;
+    auto h = ctx->window_handle->h;
     auto line = (DrawLineInfo*)data;
     auto bresenham_line = BresenhamLine(line->x0, line->y0, line->x1, line->y1);
     int x, y,mx,my;

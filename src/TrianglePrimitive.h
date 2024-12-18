@@ -7,7 +7,7 @@
 #pragma once
 #include <vector>
 #include "L_math.h"
-#include "Attribute.h"
+#include "Mesh.h"
 #include "Box3D.h"
 
 class VertexAttribute;

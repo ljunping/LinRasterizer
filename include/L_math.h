@@ -5,10 +5,10 @@
 #ifndef L_MATH_H
 #define L_MATH_H
 #pragma once
-#include <algorithm>
 #include <cmath>
 #include <initializer_list>
-#include "debug.h"
+#include <stdexcept>
+
 
 //MACRO DEFINE
 #define PI 3.1415926535897932384626433832795
@@ -28,12 +28,12 @@
 #define DEFINE_VAR_OPERATE_FLOAT_POINT(p1,p2,count,var,operate)\
 float * var[count];\
 for(int i=0;i<count;i++){\
-    var[i]=p1[i] operate p2[i];\
+var[i]=p1[i] operate p2[i];\
 }
 
 #define OPERATE_FLOAT_POINT(p1,p2,count,operate)\
 for(int i=0;i<count;i++){\
-    p1[i]=p1[i] operate p2[i];\
+p1[i]=p1[i] operate p2[i];\
 }
 
 #define EPSILON 1.0e-6
@@ -50,7 +50,6 @@ for(int i=0;i<count;i++){\
 #define INT_HIGHEST_BIT_INDEX(n) (31-__builtin_clz(n))
 //从1开始计数
 #define FIRST_1_BIT_COUNT(n) __builtin_ffs(n)
-
 
 //临时宏,退出文件去除
 #define FUNC_PARAM_DECLARE_ERROR(...)
@@ -296,6 +295,12 @@ for(int i=0;i<count;i++){\
 
 namespace L_MATH
 {
+
+    inline bool is_zero(float x)
+    {
+        return fabs(x) < EPSILON;
+    }
+
     template <typename T, int Col>
     class Vec;
     extern Vec<float, 3> FORWARD;
@@ -310,12 +315,9 @@ namespace L_MATH
     {
     private:
     public:
-        T data[Col];
+        T data[Col]{};
 
-        Vec(): data{}
-        {
-        };
-
+        Vec() = default;
         // Vec(const Vec<T, Col>& other) = default;
         //
         // Vec<T, Col>& operator =(const Vec<T, Col>& other) = default;
@@ -426,6 +428,9 @@ namespace L_MATH
 
         Vec<T, Col> normalize() const;
 
+        void normalized();
+
+
         DECLARE_VEC_OPT(+, Col)
         DECLARE_VEC_OPT(-, Col)
         DECLARE_VEC_OPT(*, Col)
@@ -439,7 +444,7 @@ namespace L_MATH
     class Mat
     {
         using Mat_T_Row_Col = Mat<T, Row, Col>;
-        Vec<T, Row> data[Col];
+        Vec<T, Row> data[Col]{};
 
         void clear(T t)
         {
@@ -453,16 +458,13 @@ namespace L_MATH
         }
 
     public:
-        Mat()
-        {
-            clear(0);
-        }
+        Mat() = default;
 
         explicit Mat(T t)
         {
             clear(t);
         }
-        explicit Mat(Vec<T,Row> diagV)
+        explicit Mat(const Vec<T,Row>& diagV)
         {
             clear(0);
             for (int i = 0; i < Row; ++i)
@@ -470,7 +472,7 @@ namespace L_MATH
                 data[i][i] = diagV[i];
             }
         }
-        explicit Mat(std::initializer_list<Vec<T, Row>> list)
+        explicit Mat(const std::initializer_list<Vec<T, Row>>& list)
         {
             if (list.size() != Row)
             {
@@ -483,7 +485,7 @@ namespace L_MATH
             }
         }
 
-        explicit Mat(std::initializer_list<T> list)
+        explicit Mat(const std::initializer_list<T>& list)
         {
             if (list.size() != Col * Row)
             {
@@ -686,6 +688,20 @@ namespace L_MATH
         return result;
     }
 
+    template <typename T, int Row,int COL>
+    T sum(const Mat<T, Row, COL>& a)
+    {
+        T result = 0;
+        for (int i = 0; i < COL; ++i)
+        {
+            for (int k = 0; k < Row; ++k)
+            {
+                result += a[i][k];
+            }
+        }
+        return result;
+    }
+
 
     DEFINE_VEC_OPT(+)
     DEFINE_VEC_OPT(-)
@@ -733,9 +749,15 @@ namespace L_MATH
         return var;
     }
 
+    template <typename T, int Col>
+    void Vec<T, Col>::normalized()
+    {
+        *this /= this->sqrt_magnitude();
+    }
+
 
     template <typename T, int Row, int Col>
-    const Mat<T, Row, Col> Mat<T, Row, Col>::IDENTITY = Mat::dialog();
+    const Mat<T, Row, Col> Mat<T, Row, Col>::IDENTITY = Mat<T, Row, Col>::dialog();
     template <typename T, int Row, int Col>
     const Mat<T, Row, Col> Mat<T, Row, Col>::ZERO(0);
 
@@ -751,6 +773,10 @@ namespace L_MATH
 
     inline Mat<float, 4, 4> rotate(const Vec<float, 3>& axis, float deg)
     {
+        if (is_zero(deg))
+        {
+            return Mat<float, 4, 4>::IDENTITY;
+        }
         float x = deg2rad(deg);
         auto a = axis.normalize();
         auto b = FORWARD;
@@ -764,7 +790,7 @@ namespace L_MATH
         Mat<float, 3, 3> axis_rot = Mat<float, 3, 3>({a, b, c});
         Mat<float, 3, 3> rot_mat_base({1, 0, 0, 0, ::cos(x), ::sin(x), 0, -::sin(x), ::cos(x)});
         auto rot_mat33 = axis_rot * rot_mat_base * axis_rot.transpose();
-        Mat<float, 4, 4> rot_mat44 = Mat<float, 4, 4>::IDENTITY;
+        Mat<float, 4, 4> rot_mat44(Mat<float, 4, 4>::IDENTITY);
         rot_mat44.copy_from(0, 0, rot_mat33);
         return rot_mat44;
     }
@@ -783,7 +809,7 @@ namespace L_MATH
         }
         float cs = dot(left, _to);
         Mat<float, 3, 3> axis_rot = Mat<float, 3, 3>({left, up, forward});
-        Mat<float, 3, 3> rot_mat_base({1, 0, 0, 0, cs, sn, 0, sn, cs});
+        Mat<float, 3, 3> rot_mat_base({1, 0, 0, 0, cs, sn, 0, -sn, cs});
         auto rot_mat_33 = axis_rot * rot_mat_base * axis_rot.transpose();
         Mat<float, 4, 4> rot_mat_44 = Mat<float, 4, 4>::IDENTITY;
         rot_mat_44.copy_from(0, 0, rot_mat_33);
@@ -848,6 +874,7 @@ namespace L_MATH
         return mat;
     }
 
+    
 
     // 平面方程 plane_normal*x-c=0
     inline float intersect_plane(const L_MATH::Vec<float, 3>& point, const Vec3& dir, const Vec3& plane_normal, float c)
@@ -856,10 +883,6 @@ namespace L_MATH
         return t;
     }
 
-    inline bool is_zero(float x)
-    {
-        return fabs(x) < EPSILON;
-    }
     template<typename T,int N>
     inline void clamp(Vec<T,N>& point, const Vec<T,N>& min, const Vec<T,N>& max)
     {
@@ -895,7 +918,6 @@ namespace L_MATH
 
     inline uint32_t pot_count(uint32_t n)
     {
-        RUNTIME_ASSERT(n!=0, "pot_count Potentially zero");
         return 31 - __builtin_clz(n);
     }
 
@@ -920,85 +942,155 @@ namespace L_MATH
     }
 
     template <class T>
-    inline T linear4(T &a, T &b, T &c, T &d,Vec4 &alpha)
+    inline T linear4(T &a, T &b, T &c, T &d,const Vec4 &alpha)
     {
         return (T)(a * alpha[0] + b * alpha[1] + c * alpha[2] + d * alpha[3]);
     }
 
-    inline void Sutherland_Hodgman(std::vector<Vec3>& clip_plane_normal,
-                                   std::vector<float>& clip_plane_c,
-                                   std::vector<Vec3>& ccw_points, std::vector<std::vector<float>>* result)
+    inline float f2_distance(const Mat44& a,const Mat44& b)
     {
-        std::vector<std::vector<float>>* ccw_points_temps[2];
-        std::vector<std::vector<float>> ccw_points_temp_3;
-        ccw_points_temps[(clip_plane_normal.size() & 1) ^ 1] = &ccw_points_temp_3;
-        ccw_points_temps[clip_plane_normal.size() & 1] = result;
-        int temp_index = 0;
-        for (int i = 0; i < ccw_points.size(); i++)
+        return sum(pow(a - b, 2));
+    }
+
+    inline void decompose_trs(const Mat44& mat,Vec3& t,Vec3& r,Vec3& s)
+    {
+        t[0] = mat[3][0];
+        t[1] = mat[3][1];
+        t[2] = mat[3][2];
+
+        s[0] = sqrt(mat[0][0] * mat[0][0] + mat[0][1] * mat[0][1] + mat[0][2] * mat[0][2]);
+        s[1] = sqrt(mat[1][0] * mat[1][0] + mat[1][1] * mat[1][1] + mat[1][2] * mat[1][2]);
+        s[2] = sqrt(mat[2][0] * mat[2][0] + mat[2][1] * mat[2][1] + mat[2][2] * mat[2][2]);
+
+        r[1] = std::asin(-mat[0][2] / s[0]);
+
+        if (std::cos(r[1]) > 0.0001)
         {
-            std::vector<float> temp_c(ccw_points.size(), 0);
-            temp_c[i] = 1;
-            ccw_points_temps[temp_index]->emplace_back(std::move(temp_c));
+            // Check for gimbal lock
+            r[0] = std::atan2(mat[1][2], mat[2][2]);
+            r[2] = std::atan2(mat[0][1], mat[0][0]);
         }
-
-        auto get_pos = [&ccw_points](std::vector<float>& alpha)
+        else
         {
-            Vec3 pos;
-            for (int i = 0; i < ccw_points.size(); i++)
-            {
-                pos += ccw_points[i] * alpha[i];
-            }
-            return pos;
-        };
-
-        auto calculate_alpha = [](std::vector<float>& alpha_l, std::vector<float>& alpha_r, float t,std::vector<float>& result)
-        {
-            for (int i = 0; i < alpha_l.size(); ++i)
-            {
-                result[i] = alpha_l[i] * (1 - t) + alpha_r[i] * t;
-            }
-        };
-
-        for (int i = 0; i < clip_plane_normal.size(); ++i)
-        {
-            auto& p_normal = clip_plane_normal[i];
-            float c = clip_plane_c[i];
-            auto& ccw_points_temp_1 = *(ccw_points_temps[temp_index]);
-            auto& ccw_points_temp_2 = *(ccw_points_temps[temp_index ^ 1]);
-            ccw_points_temp_2.clear();
-            for (int l = 0; l < ccw_points_temp_1.size(); ++l)
-            {
-                auto& alpha_l = ccw_points_temp_1[l];
-                auto l_p = get_pos(alpha_l);
-                bool l_inside = dot(p_normal, l_p) - c < 0;
-                auto r = (l + 1) % ccw_points_temp_1.size();
-                auto& alpha_r = ccw_points_temp_1[r];
-                auto r_p = get_pos(alpha_r);
-                // 假定平面方程<0是内部
-                bool r_inside = dot(p_normal, r_p) - c < 0;
-                if (!l_inside && !r_inside)
-                {
-                    continue;
-                }
-                if (l_inside)
-                {
-                    ccw_points_temp_2.emplace_back(alpha_l);
-                }
-                if (!l_inside || !r_inside)
-                {
-                    auto dir = r_p - l_p;
-                    auto t = intersect_plane(l_p, dir, p_normal, c);
-                    if (t > 0 && t < 1)
-                    {
-                        std::vector<float> result_l(ccw_points_temp_1.size(), 0);
-                        calculate_alpha(alpha_l, alpha_r, t,result_l);
-                        ccw_points_temp_2.emplace_back(std::move(result_l));
-                    }
-                }
-            }
-            temp_index ^= 1;
+            r[0] = std::atan2(-mat[2][1], mat[1][1]);
+            r[2] = 0;
         }
     }
+
+    inline Mat44 compose_trs(const Vec3& t,const Vec3& r,const Vec3& s)
+    {
+        return L_MATH::translate(t) *
+            L_MATH::rotate(L_MATH::FORWARD, r[2]) *
+            L_MATH::rotate(L_MATH::UP, r[1]) *
+            L_MATH::rotate(L_MATH::LEFT, r[0]) *
+            L_MATH::scale(s);
+    }
+
+    inline void invert_trs_mat(const Mat44& trs_mat,Mat44& M_inv)
+    {
+        Vec3 t, r, s;
+        decompose_trs(trs_mat, t, r, s);
+        float alpha = r[0];
+        float beta = r[1];
+        float gamma = r[2];
+
+        // Precompute sines and cosines
+        float cos_alpha = std::cos(alpha);
+        float sin_alpha = std::sin(alpha);
+        float cos_beta = std::cos(beta);
+        float sin_beta = std::sin(beta);
+        float cos_gamma = std::cos(gamma);
+        float sin_gamma = std::sin(gamma);
+
+        // Inverse scaling
+        float inv_sx = 1.0f / s[0];
+        float inv_sy = 1.0f / s[1];
+        float inv_sz = 1.0f / s[2];
+
+        Mat44 inv_mat;
+        // Calculate inverse matrix elements (column-major order)
+        M_inv[0][0] = cos_beta * cos_gamma * inv_sx;
+        M_inv[1][0] = cos_beta * sin_gamma * inv_sx;
+        M_inv[2][0] = -sin_beta * inv_sx;
+        M_inv[3][0] = 0.0f;
+
+        M_inv[0][1] = (sin_alpha * sin_beta * cos_gamma - cos_alpha * sin_gamma) * inv_sy;
+        M_inv[1][1] = (sin_alpha * sin_beta * sin_gamma + cos_alpha * cos_gamma) * inv_sy;
+        M_inv[2][1] = sin_alpha * cos_beta * inv_sy;
+        M_inv[3][1] = 0.0f;
+
+        M_inv[0][2] = (cos_alpha * sin_beta * cos_gamma + sin_alpha * sin_gamma) * inv_sz;
+        M_inv[1][2] = (cos_alpha * sin_beta * sin_gamma - sin_alpha * cos_gamma) * inv_sz;
+        M_inv[2][2] = cos_alpha * cos_beta * inv_sz;
+        M_inv[3][2] = 0.0f;
+
+        M_inv[0][3] = -(M_inv[0][0] * t[0] + M_inv[0][1] * t[1] + M_inv[0][2] * t[2]);
+        M_inv[1][3] = -(M_inv[1][0] * t[0] + M_inv[1][1] * t[1] + M_inv[1][2] * t[2]);
+        M_inv[2][3] = -(M_inv[2][0] * t[0] + M_inv[2][1] * t[1] + M_inv[2][2] * t[2]);
+        M_inv[3][3] = 1.0f;
+    }
+
+    inline float determinant(const Mat44& m)
+    {
+        return
+            m[3][0] * m[2][1] * m[1][2] * m[0][3] - m[2][0] * m[3][1] * m[1][2] * m[0][3] -
+            m[3][0] * m[1][1] * m[2][2] * m[0][3] + m[1][0] * m[3][1] * m[2][2] * m[0][3] +
+            m[2][0] * m[1][1] * m[3][2] * m[0][3] - m[1][0] * m[2][1] * m[3][2] * m[0][3] -
+            m[3][0] * m[2][1] * m[0][2] * m[1][3] + m[2][0] * m[3][1] * m[0][2] * m[1][3] +
+            m[3][0] * m[0][1] * m[2][2] * m[1][3] - m[0][0] * m[3][1] * m[2][2] * m[1][3] -
+            m[2][0] * m[0][1] * m[3][2] * m[1][3] + m[0][0] * m[2][1] * m[3][2] * m[1][3] +
+            m[3][0] * m[1][1] * m[0][2] * m[2][3] - m[1][0] * m[3][1] * m[0][2] * m[2][3] -
+            m[3][0] * m[0][1] * m[1][2] * m[2][3] + m[0][0] * m[3][1] * m[1][2] * m[2][3] +
+            m[1][0] * m[0][1] * m[3][2] * m[2][3] - m[0][0] * m[1][1] * m[3][2] * m[2][3] -
+            m[2][0] * m[1][1] * m[0][2] * m[3][3] + m[1][0] * m[2][1] * m[0][2] * m[3][3] +
+            m[2][0] * m[0][1] * m[1][2] * m[3][3] - m[0][0] * m[2][1] * m[1][2] * m[3][3] -
+            m[1][0] * m[0][1] * m[2][2] * m[3][3] + m[0][0] * m[1][1] * m[2][2] * m[3][3];
+    }
+
+    inline void inverse(const Mat44& m,Mat44& inv)
+    {
+        float det = determinant(m);
+        if (is_zero(det))
+        {
+            throw std::runtime_error("Matrix is not invertible");
+        }
+        inv[0][0] = (m[1][1] * m[2][2] * m[3][3] + m[1][2] * m[2][3] * m[3][1] + m[1][3] * m[2][1] * m[3][2]
+            - m[1][1] * m[2][3] * m[3][2] - m[1][2] * m[2][1] * m[3][3] - m[1][3] * m[2][2] * m[3][1]) / det;
+        inv[0][1] = -(m[0][1] * m[2][2] * m[3][3] + m[0][2] * m[2][3] * m[3][1] + m[0][3] * m[2][1] * m[3][2]
+            - m[0][1] * m[2][3] * m[3][2] - m[0][2] * m[2][1] * m[3][3] - m[0][3] * m[2][2] * m[3][1]) / det;
+        inv[0][2] = (m[0][1] * m[1][2] * m[3][3] + m[0][2] * m[1][3] * m[3][1] + m[0][3] * m[1][1] * m[3][2]
+            - m[0][1] * m[1][3] * m[3][2] - m[0][2] * m[1][1] * m[3][3] - m[0][3] * m[1][2] * m[3][1]) / det;
+        inv[0][3] = -(m[0][1] * m[1][2] * m[2][3] + m[0][2] * m[1][3] * m[2][1] + m[0][3] * m[1][1] * m[2][2]
+            - m[0][1] * m[1][3] * m[2][2] - m[0][2] * m[1][1] * m[2][3] - m[0][3] * m[1][2] * m[2][1]) / det;
+        inv[1][0] = -(m[1][0] * m[2][2] * m[3][3] + m[1][2] * m[2][3] * m[3][0] + m[1][3] * m[2][0] * m[3][2]
+            - m[1][0] * m[2][3] * m[3][2] - m[1][2] * m[2][0] * m[3][3] - m[1][3] * m[2][2] * m[3][0]) / det;
+        inv[1][1] = (m[0][0] * m[2][2] * m[3][3] + m[0][2] * m[2][3] * m[3][0] + m[0][3] * m[2][0] * m[3][2]
+            - m[0][0] * m[2][3] * m[3][2] - m[0][2] * m[2][0] * m[3][3] - m[0][3] * m[2][2] * m[3][0]) / det;
+        inv[1][2] = -(m[0][0] * m[1][2] * m[3][3] + m[0][2] * m[1][3] * m[3][0] + m[0][3] * m[1][0] * m[3][2]
+            - m[0][0] * m[1][3] * m[3][2] - m[0][2] * m[1][0] * m[3][3] - m[0][3] * m[1][2] * m[3][0]) / det;
+        inv[1][3] = (m[0][0] * m[1][2] * m[2][3] + m[0][2] * m[1][3] * m[2][0] + m[0][3] * m[1][0] * m[2][2]
+            - m[0][0] * m[1][3] * m[2][2] - m[0][2] * m[1][0] * m[2][3] - m[0][3] * m[1][2] * m[2][0]) / det;
+        inv[2][0] = (m[1][0] * m[2][1] * m[3][3] + m[1][1] * m[2][3] * m[3][0] + m[1][3] * m[2][0] * m[3][1]
+            - m[1][0] * m[2][3] * m[3][1] - m[1][1] * m[2][0] * m[3][3] - m[1][3] * m[2][1] * m[3][0]) / det;
+        inv[2][1] = -(m[0][0] * m[2][1] * m[3][3] + m[0][1] * m[2][3] * m[3][0] + m[0][3] * m[2][0] * m[3][1]
+            - m[0][0] * m[2][3] * m[3][1] - m[0][1] * m[2][0] * m[3][3] - m[0][3] * m[2][1] * m[3][0]) / det;
+        inv[2][2] = (m[0][0] * m[1][1] * m[3][3] + m[0][1] * m[1][3] * m[3][0] + m[0][3] * m[1][0] * m[3][1]
+            - m[0][0] * m[1][3] * m[3][1] - m[0][1] * m[1][0] * m[3][3] - m[0][3] * m[1][1] * m[3][0]) / det;
+        inv[2][3] = -(m[0][0] * m[1][1] * m[2][3] + m[0][1] * m[1][3] * m[2][0] + m[0][3] * m[1][0] * m[2][1]
+            - m[0][0] * m[1][3] * m[2][1] - m[0][1] * m[1][0] * m[2][3] - m[0][3] * m[1][1] * m[2][0]) / det;
+        inv[3][0] = -(m[1][0] * m[2][1] * m[3][2] + m[1][1] * m[2][2] * m[3][0] + m[1][2] * m[2][0] * m[3][1]
+            - m[1][0] * m[2][2] * m[3][1] - m[1][1] * m[2][0] * m[3][2] - m[1][2] * m[2][1] * m[3][0]) / det;
+        inv[3][1] = (m[0][0] * m[2][1] * m[3][2] + m[0][1] * m[2][2] * m[3][0] + m[0][2] * m[2][0] * m[3][1]
+            - m[0][0] * m[2][2] * m[3][1] - m[0][1] * m[2][0] * m[3][2] - m[0][2] * m[2][1] * m[3][0]) / det;
+        inv[3][2] = -(m[0][0] * m[1][1] * m[3][2] + m[0][1] * m[1][2] * m[3][0] + m[0][2] * m[1][0] * m[3][1]
+            - m[0][0] * m[1][2] * m[3][1] - m[0][1] * m[1][0] * m[3][2] - m[0][2] * m[1][1] * m[3][0]) / det;
+        inv[3][3] = (m[0][0] * m[1][1] * m[2][2] + m[0][1] * m[1][2] * m[2][0] + m[0][2] * m[1][0] * m[2][1]
+            - m[0][0] * m[1][2] * m[2][1] - m[0][1] * m[1][0] * m[2][2] - m[0][2] * m[1][1] * m[2][0]) / det;
+    }
+
+
+
+
 }
 
 

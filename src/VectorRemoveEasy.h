@@ -37,6 +37,7 @@ class SimpleVectorRemoveEasyIterator;
 template <typename T>
 class VectorRemoveEasy
 {
+    static_assert(std::is_pointer<T>::value, "Template parameter T must be a pointer type.");
     friend class VectorRemoveEasyIterator<T>;
 private:
     int cur_remove_count = 0;
@@ -188,7 +189,6 @@ void VectorRemoveEasy<T>::push_back(T& elem)
     this->data_vec.emplace_back(elem);
     index_map[elem] = this->data_vec.size() - 1;
 }
-
 template <typename T>
 void VectorRemoveEasy<T>::pop_back()
 {

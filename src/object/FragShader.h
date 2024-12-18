@@ -7,41 +7,60 @@
 #pragma once
 
 #include "Color.h"
-#include "Rasterizer.h"
+#include "Material.h"
 #include "Texture.h"
+#include "Resource.h"
 
 
+class Context;
+struct RenderPass;
 class Material;
-struct UniformInterface;
 
-class FragShader
+struct Fragment
 {
+    TrianglePrimitive* triangle = nullptr;
+    Vec3 alpha;
+    Vec3 frag_coord;
+    Vec2 resolution;
+    RenderPass* pass;
+    VertexAttribute vertex_attribute;
+};
+struct DrawCall
+{
+
+
+};
+
+class FragShader : public Resource
+{
+    INIT_TYPE(FragShader,Resource)
 public:
-    FragShader() = default;
-    int material_id{};
-    Material* material{};
-    void init();
     std::vector<Fragment>* fragment_map;
-    int ox,sx,oy,sy;
     int width, height;
+    Material* material = nullptr;
+    Texture* texture = nullptr;
+    Color* frame_buff = nullptr;
+    void begin_render_pass(Context* ctx,RenderPass* pass);
+    void end_render_pass(Context* ctx,RenderPass* pass);
     virtual Color run(int frag_index);
-    virtual ~FragShader() = default;
-    template<int N>
+    ~FragShader() override = default;
+    template <int N>
     void ddx(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result);
     template <int N>
-    void ddy(int frag_index, int attribute_index, L_MATH::Vec<float, N> &result);
-    template<int N>
-    void df(int frag_index_l,int frag_index_r, int attribute_index, L_MATH::Vec<float, N>& result);
-    template<int N>
-    void sample_texture(int frag_index, int texture_id, int uv_attribute_index, L_MATH::Vec<float, N> &result);
+    void ddy(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result);
+    template <int N>
+    void df(int frag_index_l, int frag_index_r, int attribute_index, L_MATH::Vec<float, N>& result);
+    template <int N>
+    void sample_texture(int frag_index, Texture* texture, L_MATH::Vec<float, N>& result);
 };
 
 class TextureFragShader : public FragShader
 {
+    INIT_TYPE(TextureFragShader, FragShader)
 public:
-    int text_attribute_index;
     Color run(int frag_index) override;
-};
+}
+;
 template <int N>
 void FragShader::ddx(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result)
 {
@@ -72,7 +91,7 @@ void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_M
     }
     auto &fragment_l = fragments[frag_index_l];
     auto &fragment_r = fragments[frag_index_r];
-    if (fragment_l.triangle==nullptr|| fragment_r.triangle==nullptr)
+    if (fragment_l.triangle == nullptr || fragment_r.triangle == nullptr)
     {
         return;
     }
@@ -87,28 +106,28 @@ void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_M
 }
 
 template <int N>
-void FragShader::sample_texture(int frag_index,int texture_id, int uv_attribute_index, L_MATH::Vec<float, N> &result)
+void FragShader::sample_texture(int frag_index, Texture* texture, L_MATH::Vec<float, N>& result)
 {
     Vec2 dx, dy;
     Vec2 uv;
     auto& fragment = (*fragment_map)[frag_index];
-    ddx(frag_index, uv_attribute_index, dx);
-    ddy(frag_index, uv_attribute_index, dy);
-    fragment.vertex_attribute.get_attribute_value(uv_attribute_index, uv);
-    auto texture = TEXTURE_MANAGER.get_texture(texture_id);
-    if(!texture)
+    ddx(frag_index, UV, dx);
+    ddy(frag_index, UV, dy);
+    fragment.vertex_attribute.get_attribute_value(UV, uv);
+    if (!texture)
     {
         return;
     }
     Vec2 lod;
     unsigned char _res[N];
-    lod[0]= L_MATH::dot(dx, dx);
+    lod[0] = L_MATH::dot(dx, dx);
     lod[1] = L_MATH::dot(dy, dy);
-    TEXTURE_MANAGER.sample(texture_id, uv, 0, _res);
+    texture->sample(uv, lod, _res);
     for (int i = 0; i < N; ++i)
     {
         result[i] = float(_res[i]) / float(255);
     }
 }
+
 
 #endif //LUAFRAGSHADER_H

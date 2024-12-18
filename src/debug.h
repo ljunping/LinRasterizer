@@ -4,20 +4,39 @@
 
 #ifndef L_DEBUG_H
 #define L_DEBUG_H
+
+#if PROFILE
 #include <chrono>
-#include <cstdlib>
 #include <iostream>
+class DEBUG_NODE
+{
+    std::chrono::steady_clock::time_point time_begin;
+    std::chrono::steady_clock::time_point time_end;
+    long long elapsed_time;
+    const char* prefix;
+public:
+    DEBUG_NODE()
+    {
+        time_begin = std::chrono::high_resolution_clock::now();
+    }
+    DEBUG_NODE(const char* pre)
+    {
+        prefix = pre;
+        time_begin = std::chrono::high_resolution_clock::now();
+    }
+    ~DEBUG_NODE()
+    {
+        time_end = std::chrono::high_resolution_clock::now();
+        elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_begin).count();
+        printf("%s:%.2f fps, %0.2f s\n", prefix, 1000.f / elapsed_time, elapsed_time * 1.0f / 1000.f);
+    }
+};
+#define PERFORMANCE_DEBUG(prefix) auto ___debug = DEBUG_NODE(#prefix);
+#else
+#define PERFORMANCE_DEBUG(prefix)
+#endif
 
-
-#define TIME_RUN_BEGIN()\
-auto frame_start = std::chrono::high_resolution_clock::now();
-#define TIME_RUN_END()\
-auto frame_end = std::chrono::high_resolution_clock::now();\
-auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(frame_end - frame_start).count();
-#define PRINT_RUN_TIME(PRE)\
-printf("%s:%.2f fps, %0.2f s\n", #PRE,1000.f/elapsed_time,elapsed_time*1.0f/1000.f);
-
-
+#if DEBUG
 #define RUNTIME_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
@@ -26,5 +45,7 @@ printf("%s:%.2f fps, %0.2f s\n", #PRE,1000.f/elapsed_time,elapsed_time*1.0f/1000
             std::exit(EXIT_FAILURE); \
         } \
     } while (0)
-
+#else
+#define RUNTIME_ASSERT(cond, msg)
+#endif
 #endif //DEBUG_H

@@ -5,8 +5,9 @@
 #ifndef BOX3D_H
 #define BOX3D_H
 #include"L_math.h"
-#include "PODPool.h"
 #include <queue>
+
+#include "JobSystem.h"
 
 class TrianglePrimitive;
 
@@ -198,25 +199,21 @@ class BVHTree
     }
 
     template <typename T>
-    BVHNode* build_BVH(std::vector<T*>& geometries, int depth = 0)
+    BVHNode* build_BVH(typename std::vector<T*>::iterator begin, typename std::vector<T*>::iterator end, int depth = 0)
     {
-        if (geometries.size() == 1)
+        int size = end - begin;
+        if (size == 1)
         {
-            return new_BVHNode(geometries[0]->box, nullptr, nullptr, geometries[0]);
+            return new_BVHNode((*begin)->box, nullptr, nullptr, *begin);
         }
-
         int axis = depth % 3;
-        std::sort(geometries.begin(), geometries.end(), [axis](T* a, T* b)
+        parallel_sort(begin, end, [axis](T* a, T* b)
         {
             return a->box.min[axis] < b->box.min[axis];
         });
-
-        size_t mid = geometries.size() / 2;
-        std::vector leftGeometries(geometries.begin(), geometries.begin() + mid);
-        std::vector rightGeometries(geometries.begin() + mid, geometries.end());
-
-        BVHNode* leftBVH = build_BVH(leftGeometries, depth + 1);
-        BVHNode* rightBVH = build_BVH(rightGeometries, depth + 1);
+        size_t mid = size / 2;
+        BVHNode* leftBVH = build_BVH<T>(begin, begin + mid, depth + 1);
+        BVHNode* rightBVH = build_BVH<T>(begin + mid, end, depth + 1);
         Box3D combinedAABB;
         combinedAABB.expand(leftBVH->aabb);
         combinedAABB.expand(rightBVH->aabb);
@@ -278,13 +275,6 @@ public:
     BVHTree() : root(nullptr)
     {
     };
-
-    template <typename T>
-    explicit BVHTree(std::vector<T*>& geometries, int depth = 0)
-    {
-        build(geometries, depth);
-    }
-
     template <typename T>
     void build(std::vector<T*>& geometries, int depth = 0)
     {
@@ -293,8 +283,9 @@ public:
         {
             return;
         }
+        clear();
         block_size = L_MATH::floor_pot(geometries.size());
-        root = build_BVH(geometries, depth);
+        root = build_BVH<T>(geometries.begin(), geometries.end(), depth);
     }
 
     BVHNode* new_BVHNode(Box3D& box_3d, BVHNode* left, BVHNode* right, BVHInterface* tri)

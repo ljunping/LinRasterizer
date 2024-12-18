@@ -3,10 +3,83 @@
 //
 
 #include "TrianglePrimitive.h"
-#include <__format/format_functions.h>
 #include "Camera.h"
 #include "debug.h"
-#include "Rasterizer.h"
+
+inline void Sutherland_Hodgman(std::vector<Vec3>& clip_plane_normal,
+                                   std::vector<float>& clip_plane_c,
+                                   std::vector<Vec3>& ccw_points, std::vector<std::vector<float>>* result)
+    {
+        std::vector<std::vector<float>>* ccw_points_temps[2];
+        std::vector<std::vector<float>> ccw_points_temp_3;
+        ccw_points_temps[(clip_plane_normal.size() & 1) ^ 1] = &ccw_points_temp_3;
+        ccw_points_temps[clip_plane_normal.size() & 1] = result;
+        int temp_index = 0;
+        for (int i = 0; i < ccw_points.size(); i++)
+        {
+            std::vector<float> temp_c(ccw_points.size(), 0);
+            temp_c[i] = 1;
+            ccw_points_temps[temp_index]->emplace_back(std::move(temp_c));
+        }
+
+        auto get_pos = [&ccw_points](std::vector<float>& alpha)
+        {
+            Vec3 pos;
+            for (int i = 0; i < ccw_points.size(); i++)
+            {
+                pos += ccw_points[i] * alpha[i];
+            }
+            return pos;
+        };
+
+        auto calculate_alpha = [](std::vector<float>& alpha_l, std::vector<float>& alpha_r, float t,std::vector<float>& result)
+        {
+            for (int i = 0; i < alpha_l.size(); ++i)
+            {
+                result[i] = alpha_l[i] * (1 - t) + alpha_r[i] * t;
+            }
+        };
+
+        for (int i = 0; i < clip_plane_normal.size(); ++i)
+        {
+            auto& p_normal = clip_plane_normal[i];
+            float c = clip_plane_c[i];
+            auto& ccw_points_temp_1 = *(ccw_points_temps[temp_index]);
+            auto& ccw_points_temp_2 = *(ccw_points_temps[temp_index ^ 1]);
+            ccw_points_temp_2.clear();
+            for (int l = 0; l < ccw_points_temp_1.size(); ++l)
+            {
+                auto& alpha_l = ccw_points_temp_1[l];
+                auto l_p = get_pos(alpha_l);
+                bool l_inside = dot(p_normal, l_p) - c < 0;
+                auto r = (l + 1) % ccw_points_temp_1.size();
+                auto& alpha_r = ccw_points_temp_1[r];
+                auto r_p = get_pos(alpha_r);
+                // 假定平面方程<0是内部
+                bool r_inside = dot(p_normal, r_p) - c < 0;
+                if (!l_inside && !r_inside)
+                {
+                    continue;
+                }
+                if (l_inside)
+                {
+                    ccw_points_temp_2.emplace_back(alpha_l);
+                }
+                if (!l_inside || !r_inside)
+                {
+                    auto dir = r_p - l_p;
+                    auto t = intersect_plane(l_p, dir, p_normal, c);
+                    if (t > 0 && t < 1)
+                    {
+                        std::vector<float> result_l(ccw_points_temp_1.size(), 0);
+                        calculate_alpha(alpha_l, alpha_r, t,result_l);
+                        ccw_points_temp_2.emplace_back(std::move(result_l));
+                    }
+                }
+            }
+            temp_index ^= 1;
+        }
+    }
 
 Vec3 TrianglePrimitive::st_box_plane_normal[6] = {
     Vec3{0, 0, 1},
@@ -23,7 +96,9 @@ TrianglePrimitive::~TrianglePrimitive()
 {
 }
 
-TrianglePrimitive::TrianglePrimitive(VertexAttribute& v0, VertexAttribute& v1, VertexAttribute& v2)
+TrianglePrimitive::TrianglePrimitive(VertexAttribute& v0, VertexAttribute& v1, VertexAttribute& v2):
+    id(0), inv_cross_dir_z(0),
+    inv_normal_dir_z(0), cache_area(0), d(0)
 {
     vert[0] = v0;
     vert[1] = v1;
@@ -33,6 +108,7 @@ TrianglePrimitive::TrianglePrimitive(VertexAttribute& v0, VertexAttribute& v1, V
     v2.get_attribute_value(0, v[2]);
     inv_w = Vec3::ONE;
 }
+
 
 bool TrianglePrimitive::ccw() const
 {
@@ -184,7 +260,7 @@ void TrianglePrimitive::clip()
     {
         clip_plane_normal.emplace_back( st_box_plane_normal[i]);
     }
-    L_MATH::Sutherland_Hodgman(clip_plane_normal, clip_plane_c, clip_vertices, &clip_alphas);
+    Sutherland_Hodgman(clip_plane_normal, clip_plane_c, clip_vertices, &clip_alphas);
     clip_vertices.resize(clip_alphas.size());
     clip_vertices_alpha.resize(clip_alphas.size());
     for (int i = 0; i < clip_alphas.size(); ++i)

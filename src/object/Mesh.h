@@ -5,17 +5,22 @@
 #ifndef ATTRIBUTE_H
 #define ATTRIBUTE_H
 #pragma once
+#include "CommonMacro.h"
 #include "L_math.h"
+#include "Object.h"
+#include "Resource.h"
 
+class Mesh;
 class TrianglePrimitive;
-class Attributes;
 enum AttributeType
 {
+    INVALID,
     POS,
     NORMAL,
     COLOR,
     UV,
-    TANGENT
+    TANGENT,
+    AttributeTypeCount,
 };
 struct AttributeDataFormat
 {
@@ -28,7 +33,7 @@ struct AttributeDataFormat
 class VertexAttribute
 {
 public:
-    const Attributes* attributes;
+    const Mesh* attributes;
     std::vector<float> values;
     int v[3];
     int data_count = 0;
@@ -39,33 +44,37 @@ public:
     void reset();
 };
 
-class Attributes
+class Mesh : public Resource
 {
+    static int _id;
+    INIT_TYPE(Mesh, Resource)
+    Mesh(SHARE_PTR<float[]>& vbo, int count);
+    explicit Mesh(const char* obj_file_name);
 public:
-    static bool load_obj_file(const char *obj_file_name, std::vector<Attributes> &attributeses);
-
+    int id = 0;
+    void on_create() override;
     std::vector<int> ebo;
-    std::vector<AttributeDataFormat> data_formats;
-    std::vector<int> textures;
-    float* vbo;
+    AttributeDataFormat data_formats[AttributeTypeCount];
+    SHARE_PTR<float[]> vbo;
     int data_size;
     int vert_count;
     int vert_data_length;
-    ~Attributes();
-    Attributes() = default;
-    void bind_texture(int texture_id);
-    Attributes(float *vbo, int count);
-    int bind_attribute(AttributeType type, int attr_unit_size, int offset, int stride);
-    void create_vert_attribute(int v0, int v1, int v2, const L_MATH::Vec<float, 3>& alpha, VertexAttribute& result) const;
+    ~Mesh();
+    void bind_attribute(AttributeType type, int attr_unit_size, int offset, int stride);
+    void create_vert_attribute(int v0, int v1, int v2, const L_MATH::Vec<float, 3>& alpha,
+                               VertexAttribute& result) const;
     void create_vert_attribute(const VertexAttribute& v0, const VertexAttribute& v1, const VertexAttribute& v2,
                                const L_MATH::Vec<float, 3>& alpha, VertexAttribute& result) const;
     void generate_triangles(std::vector<TrianglePrimitive>& result) const;
+    void generate_triangle(TrianglePrimitive& tri, int tri_index) const;
+    int tri_count() const;
     void generate_triangle(int v0, int v1, int v2, TrianglePrimitive& result) const;
     void generate_triangles(const std::vector<int>& ebo, std::vector<TrianglePrimitive>& result) const;
     float* operator[](int vert_index) const;
-    template<int N>
-    void get_attribute_value(int vert_index,int attribute_index, L_MATH::Vec<float, N>& result) const;
+    template <int N>
+    void get_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<float, N>& result) const;
 };
+
 
 template <int N>
 void VertexAttribute::get_attribute_value(int attribute_index, L_MATH::Vec<float, N>& result)
@@ -94,7 +103,7 @@ void VertexAttribute::get_attribute_value(int attribute_index, L_MATH::Vec<float
 }
 
 template <int N>
-void Attributes::get_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<float, N>& result) const
+void Mesh::get_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<float, N>& result) const
 {
     auto offset = data_formats[attribute_index].offset;
     auto values = (*this)[vert_index];
@@ -119,6 +128,8 @@ void Attributes::get_attribute_value(int vert_index, int attribute_index, L_MATH
         result[3] = values[offset + 3];
     }
 }
+
+
 
 
 #endif //ATTRIBUTE_H

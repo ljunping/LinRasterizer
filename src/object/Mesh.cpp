@@ -2,8 +2,9 @@
 // Created by Lin on 2024/11/15.
 //
 
-#include "Attribute.h"
+#include "Mesh.h"
 
+#include <iostream>
 #include <stdexcept>
 
 #include "debug.h"
@@ -13,38 +14,35 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-Attributes::~Attributes()
+#include "CommonMacro.h"
+
+int Mesh::_id = 0;
+
+Mesh::~Mesh()
 {
 
 }
 
-void Attributes::bind_texture(int i)
-{
-    textures.push_back(i);
-}
-
-Attributes::Attributes(float *data, int count):vbo(data), data_size(count)
+Mesh::Mesh(std::shared_ptr<float[]>& vbo, int count): vbo(vbo), data_size(count)
 {
 }
-
-
-bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes> &attributeses)
+//只加载第一个mesh,一般只有一个
+Mesh::Mesh(const char* obj_file_name)
 {
     Assimp::Importer importer;
-    const aiScene *scene = importer.ReadFile(obj_file_name, aiProcess_Triangulate | aiProcess_FlipUVs);
+    const aiScene* scene = importer.ReadFile(obj_file_name, aiProcess_Triangulate | aiProcess_FlipUVs);
     if (!scene || !scene->mRootNode)
     {
         std::cerr << "Failed to load model: " << importer.GetErrorString() << std::endl;
-        return false;
+        return;
     }
-    attributeses.resize(scene->mNumMeshes);
     for (int index = 0; index < scene->mNumMeshes; ++index)
     {
         std::vector<float> data;
         std::vector<int> ebo;
         std::vector<AttributeDataFormat> attribute_data_formats;
         // 递归遍历模型的所有网格
-        aiMesh *mesh = scene->mMeshes[index]; // 假设只有一个网格
+        aiMesh* mesh = scene->mMeshes[index]; // 假设只有一个网格
         int offset = 0;
         for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
         {
@@ -65,7 +63,7 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
                 data.push_back(mesh->mNormals[i].x);
                 data.push_back(mesh->mNormals[i].y);
                 data.push_back(mesh->mNormals[i].z);
-                if(i==0)
+                if (i == 0)
                 {
                     attribute_data_formats.emplace_back(NORMAL, 3, offset, 0);
                     offset = offset + 3;
@@ -79,7 +77,7 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
                     data.push_back(mesh->mColors[j][i].g);
                     data.push_back(mesh->mColors[j][i].b);
                     data.push_back(mesh->mColors[j][i].a);
-                    if(i==0)
+                    if (i == 0)
                     {
                         attribute_data_formats.emplace_back(COLOR, 4, offset, 0);
                         offset = offset + 4;
@@ -92,7 +90,7 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
                 {
                     data.push_back(mesh->mTextureCoords[j][i].x);
                     data.push_back(mesh->mTextureCoords[j][i].y);
-                    if(i==0)
+                    if (i == 0)
                     {
                         attribute_data_formats.emplace_back(UV, 2, offset, 0);
                         offset = offset + 2;
@@ -104,7 +102,7 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
                 data.push_back(mesh->mTangents[i].x);
                 data.push_back(mesh->mTangents[i].y);
                 data.push_back(mesh->mTangents[i].z);
-                if(i==0)
+                if (i == 0)
                 {
                     attribute_data_formats.emplace_back(TANGENT, 3, offset, 0);
                     offset = offset + 3;
@@ -115,43 +113,50 @@ bool Attributes::load_obj_file(const char *obj_file_name, std::vector<Attributes
         // 处理索引
         for (unsigned int i = 0; i < mesh->mNumFaces; ++i)
         {
-            const aiFace &face = mesh->mFaces[i];
+            const aiFace& face = mesh->mFaces[i];
             for (unsigned int j = 0; j < face.mNumIndices; ++j)
             {
                 ebo.push_back(face.mIndices[j]);
             }
         }
+        std::shared_ptr<float[]> data_p(new float[data.size()]);
 
-        float *data_p = new float[data.size()];
         for (int i = 0; i < data.size(); i++)
         {
             data_p[i] = data[i];
         }
+        this->vbo = data_p;
+        this->data_size = data.size();
+        this->vert_data_length = offset;
+        this->vert_count = data.size() / offset;
+        this->ebo = std::move(ebo);
+
         for (auto& attribute_data_format : attribute_data_formats)
         {
-            attribute_data_format.stride = offset;
+            this->bind_attribute(attribute_data_format.type, attribute_data_format.attr_unit_size,
+                                     attribute_data_format.offset, offset);
+
         }
-        attributeses[index].vbo = data_p;
-        attributeses[index].data_size = data.size();
-        attributeses[index].vert_data_length = offset;
-        attributeses[index].vert_count = data.size() / offset;
-        attributeses[index].ebo = std::move(ebo);
-        attributeses[index].data_formats = std::move(attribute_data_formats);
+        break;
+
     }
-    return true;
+}
+
+void Mesh::on_create()
+{
+    this->id = ++_id;
 }
 
 
 
-int Attributes::bind_attribute(AttributeType type,int attr_unit_size, int offset, int stride)
+void Mesh::bind_attribute(AttributeType type, int attr_unit_size, int offset, int stride)
 {
-    data_formats.emplace_back(type,attr_unit_size, offset, stride);
+    data_formats[type] = {type, attr_unit_size, offset, stride};
     vert_data_length = stride;
     vert_count = data_size / vert_data_length;
-    return data_formats.size() - 1;
 }
 
-void Attributes::create_vert_attribute(int v0, int v1, int v2, const L_MATH::Vec<float, 3>& alpha,
+void Mesh::create_vert_attribute(int v0, int v1, int v2, const L_MATH::Vec<float, 3>& alpha,
     VertexAttribute& result) const
 {
     result.v[0] = v0;
@@ -162,21 +167,21 @@ void Attributes::create_vert_attribute(int v0, int v1, int v2, const L_MATH::Vec
     result.calculate_values();
 }
 
-void Attributes::create_vert_attribute(const VertexAttribute& v0, const VertexAttribute& v1, const VertexAttribute& v2,
+void Mesh::create_vert_attribute(const VertexAttribute& v0, const VertexAttribute& v1, const VertexAttribute& v2,
     const L_MATH::Vec<float, 3>& alpha, VertexAttribute& result) const
 {
     auto vec = v0.alpha * alpha[0] + v1.alpha * alpha[1] + v2.alpha * alpha[2];
     create_vert_attribute(v0.v[0], v0.v[1], v0.v[2], vec, result);
 }
 
-void Attributes::generate_triangles(std::vector<TrianglePrimitive>& result) const
+void Mesh::generate_triangles(std::vector<TrianglePrimitive>& result) const
 {
     if (this->ebo.empty())
     {
         for (int i = 0; i < vert_count; i = i + 3)
         {
             auto& triangle_primitive = result.emplace_back();
-            triangle_primitive.id = i/3;
+            triangle_primitive.id = this->id * 1000000 + i / 3;
             generate_triangle(i, i + 1, i + 2, triangle_primitive);
         }
     }else
@@ -186,7 +191,26 @@ void Attributes::generate_triangles(std::vector<TrianglePrimitive>& result) cons
 
 }
 
-void Attributes::generate_triangle(int v0, int v1, int v2,TrianglePrimitive& result) const
+void Mesh::generate_triangle(TrianglePrimitive& tri, int tri_index) const
+{
+    if (this->ebo.empty())
+    {
+        generate_triangle(tri_index * 3, tri_index * 3 + 1, tri_index * 3 + 2, tri);
+        return;
+    }
+    generate_triangle(ebo[tri_index * 3], ebo[tri_index * 3 + 1], ebo[tri_index * 3 + 2], tri);
+}
+
+int Mesh::tri_count() const
+{
+    if (this->ebo.empty())
+    {
+        return vert_count / 3;
+    }
+    return ebo.size() / 3;
+}
+
+void Mesh::generate_triangle(int v0, int v1, int v2,TrianglePrimitive& result) const
 {
     create_vert_attribute(v0, v1, v2,Vec3{1, 0, 0}, result.vert[0]);
     create_vert_attribute(v0, v1, v2,Vec3{0, 1, 0}, result.vert[1]);
@@ -197,27 +221,27 @@ void Attributes::generate_triangle(int v0, int v1, int v2,TrianglePrimitive& res
     result.inv_w = Vec3::ONE;
 }
 
-void Attributes::generate_triangles(const std::vector<int>& ebo, std::vector<TrianglePrimitive>& result) const
+void Mesh::generate_triangles(const std::vector<int>& ebo, std::vector<TrianglePrimitive>& result) const
 {
     int max_v = 0;
     for (int i = 0; i < ebo.size(); i = i + 3)
     {
         max_v = fmax(ebo[i], max_v);
         auto& triangle_primitive = result.emplace_back();
-        triangle_primitive.id = i/3;
+        triangle_primitive.id = this->id * 1000000 + i / 3;
         generate_triangle(ebo[i], ebo[i+1], ebo[i+2], triangle_primitive);
     }
 }
 
-float* Attributes::operator[](int vert_index) const
+float* Mesh::operator[](int vert_index) const
 {
-    return vbo + vert_index * vert_data_length;
+    return vbo.get() + vert_index * vert_data_length;
 }
 
 
 void VertexAttribute::calculate_values()
 {
-    if (values.size()!=attributes->vert_data_length)
+    if (values.size() != attributes->vert_data_length)
     {
         values.resize(attributes->vert_data_length);
     }

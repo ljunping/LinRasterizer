@@ -18,13 +18,13 @@ void JobSystem::finish_job(Job* job)
     }
 }
 // 调用之前一定加锁了
-void JobSystem::dispatch_jobs(JobGroup* job_group, int count)
+void JobSystem::dispatch_jobs(JobGroup* job_group, std::size_t count)
 {
     int job_count = std::min(job_group->job_count - job_group->job_cur_enqueued, count);
     assign_thread_load_temp.assign(worker_num, 0);
     for (int i = 0; i < job_count; ++i)
     {
-        int min_thead_id=0;
+        int min_thead_id = 0;
         int min_load = thread_loads[0];
         for (int j = 0; j < worker_num; ++j)
         {
@@ -65,7 +65,7 @@ void JobSystem::working(int thread_id)
             std::unique_lock<std::mutex> lock(queue_mutex_vec[thread_id]);
             wait_job_cond.wait(lock, [this,&job,&thread_id]
             {
-                return receive_work(thread_id, job);
+                return is_stop || receive_work(thread_id, job);
             });
             if (is_stop) {
                 break; // 停止线程
@@ -93,9 +93,9 @@ bool JobSystem::receive_work(int thread_id, Job& job)
     if (!thread_work_queue.empty())
     {
         auto& _job = thread_work_queue.front();
-        thread_work_queue.pop_front();
         job = _job;
         --thread_loads[thread_id];
+        thread_work_queue.pop_front();
         return true;
     }
 
@@ -108,9 +108,9 @@ bool JobSystem::receive_work(int thread_id, Job& job)
 
             if (!_queue.empty()) {
                 auto& job_ = _queue.front();
-                _queue.pop_front();
                 job = job_;
                 --thread_loads[i];
+                _queue.pop_front();
                 queue_mutex_vec[i].unlock();
                 return true;
             }
@@ -136,7 +136,10 @@ void JobSystem::finish_job_group(int job_group_id)
         }
     }
     auto job_group = job_groups[job_group_id];
-    job_group->complete(job_group->data_begin, job_group->data_end, job_group->global_data);
+    if (job_group->complete)
+    {
+        job_group->complete(job_group->data_begin, job_group->data_end, job_group->global_data);
+    }
     job_group_map.erase(job_group_id);
     job_groups.erase(job_group_id);
     depend_group_count_map.erase(job_group_id);
@@ -157,7 +160,7 @@ JobSystem::JobSystem(int thread_num)
     worker_num = thread_num;
     thread_work_queues.resize(worker_num);
     assign_thread_load_temp.resize(worker_num);
-    start();
+    this->start();
 }
 
 JobSystem::~JobSystem()
@@ -225,16 +228,16 @@ int JobSystem::create_job_group(int depend_group_id)
 }
 
 void JobSystem::alloc_jobs(int job_group_id,
-                           int job_unit_size,
-                           int data_begin,
-                           int data_end,
+                           std::size_t job_unit_size,
+                           std::size_t data_begin,
+                           std::size_t data_end,
                            void* global_data,
-                           void (*execute)(int data_begin, int data_en,void * global_data),
-                           void (*complete)(int data_begin, int data_end, void * global_data))
+                           void (*execute)(std::size_t data_begin, std::size_t data_end,void * global_data),
+                           void (*complete)(std::size_t data_begin, std::size_t data_end, void * global_data))
 {
     if (job_unit_size == 0)
     {
-        job_unit_size = (data_end - data_begin + 2 * NUM_THREADS - 1) / (2 * NUM_THREADS);
+        job_unit_size = (data_end - data_begin + 2ll * NUM_THREADS - 1ll) / (2ll * NUM_THREADS);
     }
     std::lock_guard<std::shared_mutex> lock(share_mutex);
     if (job_groups.contains(job_group_id))
@@ -243,7 +246,7 @@ void JobSystem::alloc_jobs(int job_group_id,
         job_group->data_begin = data_begin;
         job_group->data_end = data_end;
         job_group->global_data = global_data;
-        int job_size = (data_end - data_begin + job_unit_size - 1) / job_unit_size;
+        std::size_t job_size = (data_end - data_begin + job_unit_size - 1) / job_unit_size;
         job_group->job_unit_size = job_unit_size;
         job_group->job_count = job_size;
         job_group->complete = complete;
@@ -263,8 +266,12 @@ bool JobSystem::stop()
     }
     for (auto job_group : job_groups)
     {
-        delete job_group.second;
+        if (job_group.second)
+        {
+            delete job_group.second;
+        }
     }
+    job_groups.clear();
     return true;
 }
 

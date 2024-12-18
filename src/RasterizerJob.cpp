@@ -3,269 +3,270 @@
 //
 #include "RasterizerJob.h"
 #include "BresenhamLine.h"
+#include "Camera.h"
 #include "PODPool.h"
 #include "FragShader.h"
-void ray_cast_frag_execute(int data_begin, int data_end,  void* global_data)
+#include "WindowHandle.h"
+#include "TrianglePrimitive.h"
+#include"Context.h"
+#include "Mesh.h"
+#include "MeshRender.h"
+
+void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end,  void* global_data)
 {
-    Rasterizer* rasterizer = (Rasterizer*)(global_data);
-    int thread_tile_size = rasterizer->thread_tile_size;
-    int w = rasterizer->w;
-    int h = rasterizer->h;
+    Context* ctx = (Context*)global_data;
+    int w = ctx->window_handle->w;
+    int h = ctx->window_handle->h;
+    auto current_render_pass = ctx->current_render_pass();
     RayCasterResult result;
     for (int idx = data_begin; idx < data_end; idx++)
     {
-        auto work = &rasterizer->ray_cast_works[idx];
-        auto ox = (int)::fmax(work->base.block_x * thread_tile_size, 0);
-        auto oy =(int) ::fmax(work->base.block_y * thread_tile_size, 0);
-        auto sx = (int)::fmin((work->base.block_x + 1) * (thread_tile_size), w);
-        auto sy = (int)::fmin((work->base.block_y + 1) * (thread_tile_size), h);
+        int i = idx / w, j = idx % w;
         float y,x;
-        for (int i = oy; i < sy; ++i)
+        invert_view_transform(w, h, j, i, x, y);
+        if (ctx->build_bvh)
         {
-            for (int j = ox; j < sx; ++j)
+            if (!ray_caster_bvh(current_render_pass->pass_node.camera, current_render_pass->bvh_tree, x, y, &result))
             {
-                invert_view_transform(w, h, j, i, x, y);
-                if (rasterizer->camera->build_bvh)
-                {
-                    if (!ray_caster_bvh(rasterizer->camera, x, y, &result))
-                    {
-                        continue;
-                    }
-                }else
-                {
-
-                    if (!ray_caster(rasterizer->camera, x, y, &result))
-                    {
-                        continue;
-                    }
-                }
-
-                add_fragment(*result.triangle, rasterizer, result.alpha, i, j);
+                continue;
+            }
+        }else
+        {
+            if (!ray_caster(ctx, x, y, &result))
+            {
+                continue;
             }
         }
+
+        add_fragment(*result.triangle,ctx, result.alpha, i, j);
     }
 
 }
 
-void ray_cast_frag_complete(int data_begin, int data_end, void* global_data)
+void ray_cast_frag_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
 
 }
 
-void clear_execute(int data_begin, int data_end, void* global_data)
+void clear_context_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
 {
-    Rasterizer* rasterizer = (Rasterizer*)global_data;
-    int thread_tile_size = rasterizer->thread_tile_size;
-    int w = rasterizer->w;
-    int h = rasterizer->h;
+    Context* ctx = (Context*)global_data;
+    auto frame_buff = ctx->get_frame_buffer(0);
+    auto background_color = ctx->background_color;
     for (int idx = data_begin; idx < data_end; idx++)
     {
-        auto work = &rasterizer->clear_works[idx];
-        auto ox = (int)::fmax(work->base.block_x * thread_tile_size, 0);
-        auto oy =(int) ::fmax(work->base.block_y * thread_tile_size, 0);
-        auto sx = (int)::fmin((work->base.block_x + 1) * (thread_tile_size), w);
-        auto sy = (int)::fmin((work->base.block_y + 1) * (thread_tile_size), h);
-        for (int i = oy; i < sy; ++i)
-        {
-            for (int j = ox; j < sx; ++j)
-            {
-                work->buffer[i * w + j] = work->color;
-                rasterizer->depth_buff[i * w + j] = 1.f;
-                rasterizer->fragment_map[i * w + j].triangle = nullptr;
-            }
-        }
+        frame_buff[idx] = background_color;
     }
 }
 
-void clear_complete(int data_begin, int data_end, void* global_data)
+
+void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
+{
+    Context* ctx = (Context*)global_data;
+    auto current_render_pass = ctx->current_render_pass();
+    auto& pass_node = current_render_pass->pass_node;
+    auto background_color = pass_node.camera->background_color;
+    Color* frame_buff = ctx->get_frame_buffer(pass_node.frame_buff_index);
+    for (int idx = data_begin; idx < data_end; idx++)
+    {
+        if (pass_node.camera->solid_color)
+        {
+            frame_buff[idx] = background_color;
+        }
+        pass_node.camera->depth_buff[idx] = 1.f;
+        pass_node.camera->fragment_map[idx].triangle = nullptr;
+    }
+}
+
+void clear_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
 
 }
 
-void run_frag_shader_execute(int data_begin, int data_end, void* global_data)
+void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    Rasterizer* rasterizer = (Rasterizer*)global_data;
-    int thread_tile_size = rasterizer->thread_tile_size;
-    int w = rasterizer->w;
-    int h = rasterizer->h;
+    FragShader* frag_shader = (FragShader*)global_data;
+    Color* frame_buff = frag_shader->frame_buff;
+    int w = frag_shader->width;
+    int h = frag_shader->height;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
-        FragShaderWork* work = &rasterizer->frag_shader_works[idx];
-        auto &lua_frag_shader = *work->frag_shader;
-        auto sx = (int)::fmin((work->base.block_x + 1) * (thread_tile_size), w);
-        auto sy = (int)::fmin((work->base.block_y + 1) * (thread_tile_size), h);
-        auto ox = (int)::fmax(work->base.block_x * thread_tile_size, 0);
-        auto oy =(int) ::fmax(work->base.block_y * thread_tile_size, 0);
-        lua_frag_shader.ox = ox;
-        lua_frag_shader.oy = oy;
-        lua_frag_shader.sx = sx;
-        lua_frag_shader.sy = sy;
-        lua_frag_shader.width = rasterizer->w;
-        lua_frag_shader.height = rasterizer->h;
-        lua_frag_shader.fragment_map = &rasterizer->fragment_map;
-
-        for (int i = oy; i < sy; ++i)
+        auto& fragment = (*frag_shader->fragment_map)[idx];
+        int i = fragment.frag_coord[1], j = fragment.frag_coord[0];
+        auto tri = fragment.triangle;
+        if (tri)
         {
-            for (int j = ox; j < sx; ++j)
-            {
-                auto fragment = &rasterizer->fragment_map[i * w + j];
-                auto tri = fragment->triangle;
-                if (tri)
-                {
-                    work->buffer[(h - i - 1) * w + j] = lua_frag_shader.run(i * w + j);
-                }
-            }
+            frame_buff[(h - i - 1) * w + j] = frag_shader->run(i * w + j);
         }
     }
 }
 
-void prepare_frag_shader_execute(int data_begin, int data_end, void* global_data)
+void prepare_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    Rasterizer* rasterizer = (Rasterizer*)global_data;
-    int thread_tile_size = rasterizer->thread_tile_size;
-    int w = rasterizer->w;
-    int h = rasterizer->h;
+    Context* context = (Context*)global_data;
+    int w = context->window_handle->w;
+    int h = context->window_handle->h;
+    auto current_render_pass = context->current_render_pass();
+    auto& pass_node = current_render_pass->pass_node;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
-        FragShaderWork* work = &rasterizer->frag_shader_works[idx];
-        auto &lua_frag_shader = *work->frag_shader;
-        auto sx = (int)::fmin((work->base.block_x + 1) * (thread_tile_size), w);
-        auto sy = (int)::fmin((work->base.block_y + 1) * (thread_tile_size), h);
-        auto ox = (int)::fmax(work->base.block_x * thread_tile_size, 0);
-        auto oy =(int) ::fmax(work->base.block_y * thread_tile_size, 0);
-        lua_frag_shader.ox = ox;
-        lua_frag_shader.oy = oy;
-        lua_frag_shader.sx = sx;
-        lua_frag_shader.sy = sy;
-        lua_frag_shader.width = rasterizer->w;
-        lua_frag_shader.height = rasterizer->h;
-        lua_frag_shader.fragment_map = &rasterizer->fragment_map;
-
-        for (int i = oy; i < sy; ++i)
-        {
-            for (int j = ox; j < sx; ++j)
-            {
-                auto _index = i * w + j;
-                auto fragment = &rasterizer->fragment_map[_index];
-                auto tri = fragment->triangle;
-                if (!tri)
-                    continue;
-                tri->vert[0].attributes->create_vert_attribute(tri->vert[0], tri->vert[1], tri->vert[2],
-                                                               fragment->alpha,
-                                                               fragment->vertex_attribute);
-            }
-        }
+        auto lua_frag_shader = *Resource::get_resource<FragShader>(pass_node.frag_shader);
+        lua_frag_shader.width = w;
+        lua_frag_shader.height = h;
+        lua_frag_shader.fragment_map = &pass_node.camera->fragment_map;
+        auto fragment = &pass_node.camera->fragment_map[idx];
+        auto tri = fragment->triangle;
+        if (!tri)
+            continue;
+        tri->vert[0].attributes->create_vert_attribute(tri->vert[0], tri->vert[1], tri->vert[2],
+                                                       fragment->alpha,
+                                                       fragment->vertex_attribute);
     }
 }
 
 
-void run_frag_shader_complete(int data_begin, int data_end, void* global_data)
+void run_frag_shader_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
 
 }
 
-void rast_tri_execute(int data_begin, int data_end, void* global_data)
+void rast_tri_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    auto rasterizer = (Rasterizer*)global_data;
-    auto& triangle_primitives = rasterizer->camera->proj_triangles;
+    auto ctx = (Context*)global_data;
+    auto& triangle_primitives = ctx->render_passes.back().primitives;
     for (int i = data_begin; i < data_end; ++i)
     {
-        auto& triangle_primitive = triangle_primitives[i];
+        auto& triangle_primitive = *triangle_primitives[i];
         if (triangle_primitive.discard || triangle_primitive.inv_cross_dir_z < 0)
         {
             continue;
         }
-        rast_tri(triangle_primitive, rasterizer);
+        rast_tri(triangle_primitive, ctx);
     }
 }
 
-void rast_tri_complete(int data_begin, int data_end, void* global_data)
+void rast_tri_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
 
 }
 
-void mid_filter_execute(int data_begin, int data_end, void* global_data)
+void mid_filter_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
 
 }
 
-void mid_filter_complete(int data_begin, int data_end, void* global_data)
+void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
 }
 
-void execute_mvp_break_huge_triangle(int data_begin, int data_end, void* global_data)
+void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    Camera* camera = (Camera*)global_data;
-    Mat44& mvp = camera->thread_mvp;
-    auto& triangles = camera->scene->get_model_triangle_list();
-    auto& triangle_primitives = camera->proj_triangles;
+    static std::mutex mutex;
+    auto* data = (std::tuple<RenderPass*,Mat44>*)global_data;
+    Mat44& mvp = std::get<1>(*data);
+    auto render_pass = std::get<0>(*data);
+    auto get_model_tri = [render_pass](int index, TrianglePrimitive& tri)
+    {
+        for (int i = 0; i < render_pass->meshes.size(); ++i)
+        {
+            Mesh& mesh = *Resource::get_resource<Mesh>(render_pass->meshes[i].first);
+            if (index < mesh.tri_count())
+            {
+                mesh.generate_triangle(tri, index);
+            }
+            index -= mesh.tri_count();
+        }
+    };
+
+
     for (int i = data_begin; i < data_end; ++i)
     {
-        if (!triangles[i].is_remove())
-        {
-            triangle_primitives[i].discard = false;
-            triangle_primitives[i] = *triangles[i].data;
-            triangle_primitives[i].update(mvp);
-            if (triangle_primitives[i].area() > HUGE_TRIANGLE_THR && HUB_TRIANGLE_BREAK_COUNT_MAX > 0)
-            {
-                std::lock_guard<std::mutex> lock(camera->proj_triangles_mutex);
-                int break_count = HUB_TRIANGLE_BREAK_COUNT_MAX;
-                std::vector<TrianglePrimitive> result;
-                break_huge_triangle(triangle_primitives[i], HUGE_TRIANGLE_THR, result, break_count);
-                triangle_primitives.insert(triangle_primitives.end(), result.begin(), result.end());
-            }
-        }
-        else
-        {
-            triangle_primitives[i].discard = true;
-        }
+        render_pass->primitives[i] = render_pass->tri_pool + i;
+        auto& triangle_primitive = *render_pass->primitives[i];
+        get_model_tri(i, triangle_primitive);
+        triangle_primitive.discard = false;
+        triangle_primitive.update(mvp);
+        // if (triangle_primitives[i].area() > HUGE_TRIANGLE_THR && HUB_TRIANGLE_BREAK_COUNT_MAX > 0)
+        // {
+        //     std::lock_guard<std::mutex> lock(mutex);
+        //     int break_count = HUB_TRIANGLE_BREAK_COUNT_MAX;
+        //     std::vector<TrianglePrimitive> result;
+        //     break_huge_triangle(triangle_primitives[i], HUGE_TRIANGLE_THR, result, break_count);
+        //     triangle_primitives.insert(triangle_primitives.end(), result.begin(), result.end());
+        // }
     }
 }
 
-void complete_mvp_break_huge_triangle(int data_begin, int data_end, void* global_data)
+void complete_mvp_break_huge_triangle(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
 
 }
 
 
-bool add_fragment(TrianglePrimitive& tri, Rasterizer* rasterizer,L_MATH::Vec<float, 3>& alpha, int i, int j)
+void vert_view_transform(const L_MATH::Mat<float, 4, 4>& mvp, const int w, const int h,
+    VertexAttribute* vertex_attribute, L_MATH::Vec<float, 3>& alpha_, int& i, int& j)
 {
-    auto w = rasterizer->w;
+    int xy[6];
+    Vec3 alpha = vertex_attribute[0].alpha * alpha_[0] + vertex_attribute[1].alpha * alpha_[1] + vertex_attribute[2].
+        alpha * alpha_[2];
+    Vec3 result;
+    auto attributes = vertex_attribute->attributes;
+    //每个三角形的三个顶点的vertex_attribute.v是一致的
+    for (int k = 0; k < 3; ++k)
+    {
+        attributes->get_attribute_value(vertex_attribute->v[k], 0, result);
+        auto var = (Vec4)(mvp * Vec4(result, 1));
+        var /= var[3];
+        view_transform(w, h, var[0], var[1], xy[k * 2], xy[k * 2 + 1]);
+    }
+    i = static_cast<int>(xy[0] * alpha[0] + xy[2] * alpha[1] + xy[4] * alpha[2]);
+    j = static_cast<int>(xy[1] * alpha[0] + xy[3] * alpha[1] + xy[5] * alpha[2]);
+}
+
+bool add_fragment(TrianglePrimitive& tri, Context* ctx,L_MATH::Vec<float, 3>& alpha, int i, int j)
+{
+    auto w = ctx->window_handle->w;
     int index = i * w + j;
     auto st_z = tri.v[0][2] * alpha[0] + tri.v[1][2] * alpha[1] + tri.v[2][2] * alpha[2];
-    auto depth = rasterizer->depth_buff[index];
+    auto current_render_pass = ctx->current_render_pass();
+    auto& pass_node = current_render_pass->pass_node;
+    auto depth = pass_node.camera->depth_buff[index];
     if (depth < st_z)
     {
         return false;
     }
-    auto &fragment = rasterizer->fragment_map[index];
+    auto& fragment = pass_node.camera->fragment_map[index];
     if (L_MATH::is_zero(depth - st_z) && fragment.triangle && fragment.triangle->id < tri.id)
     {
         return false;
     }
     auto alpha_inv_w = 1 / L_MATH::dot(alpha, tri.inv_w);
-    rasterizer->depth_buff[index] = st_z;
+    pass_node.camera->depth_buff[index] = st_z;
     alpha *= tri.inv_w * alpha_inv_w;
     auto real_z = -1 * alpha_inv_w;
     fragment.triangle = &tri;
     fragment.frag_coord = Vec3{(float)j, (float)i, real_z};
     fragment.alpha = alpha;
     fragment.resolution[0] = w;
-    fragment.resolution[1] = rasterizer->h;
+    fragment.pass = current_render_pass;
+    fragment.resolution[1] = ctx->window_handle->h;
     return true;
 }
-bool ray_caster(Camera* camera, float si, float sj, RayCasterResult* result)
+
+bool ray_caster(Context* ctx, float si, float sj, RayCasterResult* result)
 {
     // TIME_RUN_BEGIN()
-    Vec3 sv = Vec3({si, sj, -1});
-    float min_z = -camera->far;
-    bool _is_ray_caster = false;
-    auto&proj_triangle_list = camera->proj_triangles;
 
+    auto current_render_pass = ctx->current_render_pass();
+    auto& pass_node = current_render_pass->pass_node;
+    Vec3 sv = Vec3({si, sj, -1});
+    float min_z = -pass_node.camera->far;
+    bool _is_ray_caster = false;
+    auto& proj_triangle_list = current_render_pass->primitives;
     L_MATH::Vec<float, 3> alpha;
     for (int i = 0; i < proj_triangle_list.size(); ++i)
     {
-        auto& triangle = proj_triangle_list[i];
+        auto& triangle = *proj_triangle_list[i];
         if (triangle.discard)
         {
             continue;
@@ -284,7 +285,7 @@ bool ray_caster(Camera* camera, float si, float sj, RayCasterResult* result)
             auto alpha_inv = 1 / L_MATH::dot(alpha, triangle.inv_w);
             auto z = -1.f * alpha_inv;
             alpha = alpha * triangle.inv_w * alpha_inv;
-            if (z < -camera->near && z > min_z)
+            if (z < -pass_node.camera->near && z > min_z)
             {
                 result->triangle = &triangle;
                 result->alpha = alpha;
@@ -297,17 +298,21 @@ bool ray_caster(Camera* camera, float si, float sj, RayCasterResult* result)
     return _is_ray_caster;
 }
 
-bool ray_caster_bvh(Camera* camera, float si, float sj, RayCasterResult* result)
+bool ray_caster_bvh(Camera* camera,BVHTree* bvh_tree,float si, float sj, RayCasterResult* result)
 {
     Vec3 sv = Vec3({si, sj, -1});
     float min_z = -camera->far;
     bool _is_ray_caster = false;
     std::vector<RayCasterResult> ray_casters;
-    if (camera->bvh_tree->intersect_traverse(sv, L_MATH::FORWARD, ray_casters))
+    if (bvh_tree->intersect_traverse(sv, L_MATH::FORWARD, ray_casters))
     {
         for (auto ray_caster : ray_casters)
         {
             auto& triangle = *ray_caster.triangle;
+            if (triangle.discard)
+            {
+                continue;
+            }
             auto alpha = ray_caster.alpha;
             auto alpha_inv = 1 / L_MATH::dot(alpha, triangle.inv_w);
             auto z = -alpha_inv;
@@ -325,7 +330,7 @@ bool ray_caster_bvh(Camera* camera, float si, float sj, RayCasterResult* result)
     return _is_ray_caster;
 }
 
-bool ray_caster_bvh_priqueue(Camera* camera, float si, float sj, RayCasterResult* result)
+bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* bvh_tree, float si, float sj, RayCasterResult* result)
 {
     Vec3 sv = Vec3({si, sj, -1});
     float min_z = -camera->far;
@@ -342,13 +347,17 @@ bool ray_caster_bvh_priqueue(Camera* camera, float si, float sj, RayCasterResult
     {
         auto& alpha = result->alpha;
         auto triangle_primitive = result->triangle;
+        if (triangle_primitive->discard)
+        {
+            return -INFINITY;
+        }
         return -(triangle_primitive->v[0][2] * alpha[0]
             + triangle_primitive->v[1][2] * alpha[1]
             + triangle_primitive->v[2][2]
             * alpha[2]);
     };
 
-    if (camera->bvh_tree->intersect_compare_distance(sv,L_MATH::FORWARD,  result, box_distance, tri_distance))
+    if (bvh_tree->intersect_compare_distance(sv, L_MATH::FORWARD, result, box_distance, tri_distance))
     {
         auto& triangle = *result->triangle;
         auto alpha = result->alpha;
@@ -363,15 +372,14 @@ bool ray_caster_bvh_priqueue(Camera* camera, float si, float sj, RayCasterResult
             min_z = result->z;
             _is_ray_caster = true;
         }
-
     }
     return _is_ray_caster;
 }
 
-void rast_tri(TrianglePrimitive& tri, Rasterizer* rasterizer)
+void rast_tri(TrianglePrimitive& tri, Context* ctx)
 {
-    auto h = rasterizer->h;
-    auto w = rasterizer->w;
+    auto h = ctx->window_handle->h;
+    auto w = ctx->window_handle->w;
     tri.clip();
     auto& clip_vertices = tri.clip_vertices;
     auto& alpha_array = tri.clip_vertices_alpha;
@@ -391,8 +399,8 @@ void rast_tri(TrianglePrimitive& tri, Rasterizer* rasterizer)
         }
         else
         {
-            vert_view_transform(rasterizer->camera->thread_mvp, w, h, tri.vert, alpha_array[i], clip_vertices_int[i][0],
-                                clip_vertices_int[i][1]);
+            // vert_view_transform(ctx->main_camera->view_mat, w, h, tri.vert, alpha_array[i], clip_vertices_int[i][0],
+            //                     clip_vertices_int[i][1]);
         }
 
 
@@ -483,7 +491,7 @@ void rast_tri(TrianglePrimitive& tri, Rasterizer* rasterizer)
             {
                 t = (i - l0x1) * 1.0 / (l0x2 - l0x1);
                 alpha = alpha_l0 * (1 - t) + l_alpha1 * t;
-                add_fragment(tri, rasterizer, alpha, l0y, i);
+                add_fragment(tri, ctx, alpha, l0y, i);
             }
         }
     next:
@@ -516,7 +524,7 @@ void rast_tri(TrianglePrimitive& tri, Rasterizer* rasterizer)
             invert_view_transform(w, h, lx, ly, st_l[0], st_l[1]);
             tri.barycentric(st_l, l_alpha);
 
-            add_fragment(tri, rasterizer, l_alpha, ly, lx);
+            add_fragment(tri, ctx, l_alpha, ly, lx);
 
         }
 
@@ -528,7 +536,7 @@ void rast_tri(TrianglePrimitive& tri, Rasterizer* rasterizer)
 
             invert_view_transform(w, h, rx, ry, st_r[0], st_r[1]);
             tri.barycentric(st_r, r_alpha);
-            add_fragment(tri, rasterizer, r_alpha, ry, rx);
+            add_fragment(tri, ctx, r_alpha, ry, rx);
 
         }
         next_right = false;
@@ -550,7 +558,7 @@ void rast_tri(TrianglePrimitive& tri, Rasterizer* rasterizer)
                 // alpha = l_alpha * (1 - t) + r_alpha * t;
                 invert_view_transform(w, h, i, ry, st_r[0], st_r[1]);
                 tri.barycentric(st_r, alpha);
-                add_fragment(tri, rasterizer, alpha, ry, i);
+                add_fragment(tri, ctx, alpha, ry, i);
             }
         }
         else if (ly < ry)
