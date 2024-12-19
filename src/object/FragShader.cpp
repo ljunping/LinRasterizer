@@ -52,6 +52,7 @@ Vec4 TextureFragShader::run(int frag_index)
         this->sample_texture(frag_index, texture, frag_color);
         return frag_color;
     }
+    return Vec4::ZERO;
 }
 
 

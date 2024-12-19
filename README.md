@@ -59,7 +59,7 @@ make
 ###### 8、ECS架构
 类似UNITY引擎，具备GetComponent<T>()、RemoveComponent<T>等基本方法。实现了Transform、Camera、MeshRender等核心组件.
 ###### 9、性能测试
-设备Macbook Pro2023 14寸笔记本电脑。渲染"resources/pig/16433_Pig.obj"文件，包含了120576个三角形。分辨率640*480.
+设备Macbook Pro2023 14寸笔记本电脑。渲染"resources/pig/16433_Pig.obj"文件，包含了120576个三角形。分辨率640*480.默认 release build
 在不同的MSAA倍率下，光线投射和光栅化两种渲染模式的平均帧率如下
 
 1、JobSystem开启8线程

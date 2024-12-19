@@ -84,8 +84,9 @@ void FragShader::ddy(int frag_index, int attribute_index, L_MATH::Vec<float, N>&
 template <int N>
 void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_MATH::Vec<float, N> &result)
 {
-    auto &fragments = *fragment_map;
-    if (frag_index_l < 0 || frag_index_l >= fragments.size() || frag_index_r < 0 || frag_index_r >= fragments.size())
+    int size = (frag_index_l / (width * height) + 1) * (width * height);
+    auto& fragments = *fragment_map;
+    if (frag_index_l < 0 || frag_index_l >= size || frag_index_r < 0 || frag_index_r >= size)
     {
         return;
     }
