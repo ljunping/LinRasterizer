@@ -187,12 +187,3 @@ void Context::unregister_after_scene_render_func(void(* func)(Context* ctx, Colo
     }
 }
 
-void set_current_ctx(Context* ctx)
-{
-    current_context = ctx;
-}
-
-Context* get_current_ctx()
-{
-    return current_context;
-}

@@ -87,7 +87,7 @@ int main()
     ctx->enable_ray_cast = false;
     ctx->build_bvh = false;
     ctx->msaa_factor = 4;
-    ctx->enable_edge = false;
+    ctx->enable_edge = true;
     ctx->root->add_child(create_obj_model_node("pig/16433_Pig.obj"));
     // ctx->root->add_child(simple_tri());
     ctx->main_loop();

@@ -63,9 +63,15 @@ public:
 };
 extern Context* current_context;
 
-void set_current_ctx(Context* ctx);
+inline void set_current_ctx(Context* ctx)
+{
+    current_context = ctx;
+}
 
-Context* get_current_ctx();
+inline Context* get_current_ctx()
+{
+    return current_context;
+}
 
 
 #endif //CONTEXT_H

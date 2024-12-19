@@ -7,7 +7,7 @@
 #include "PODPool.h"
 
 template <class T>
-struct  LinkNode
+struct LinkNode
 {
     T data;
     LinkNode<T>* next;
@@ -20,23 +20,26 @@ class LinkList
 public:
     LinkNode<T>* head;
     LinkNode<T>* tail;
-    int count=0;
+    int count = 0;
+
     LinkList()
     {
         head = PODPool<LinkNode<T>>::POOL.create();
     }
+
     ~LinkList()
     {
-        while (head!= nullptr)
+        while (head != nullptr)
         {
             LinkNode<T>* temp = head->next;
             head->next = nullptr;
-            head->data=nullptr;
+            head->data = nullptr;
             head->prev = nullptr;
             PODPool<LinkNode<T>>::POOL.recycle(head);
             head = temp;
         }
     }
+
     LinkNode<T>* add_first(T data)
     {
         LinkNode<T>* node = PODPool<LinkNode<T>>::POOL.create();
@@ -53,6 +56,7 @@ public:
         count++;
         return node;
     }
+
     LinkNode<T>* add_last(T data)
     {
         LinkNode<T>* node = PODPool<LinkNode<T>>::POOL.create();
@@ -63,6 +67,7 @@ public:
         count++;
         return node;
     }
+
     void remove(LinkNode<T>* node)
     {
         if (tail == node)
@@ -82,7 +87,7 @@ public:
             node->next->prev = node->prev;
         }
         node->next = nullptr;
-        node->data=nullptr;
+        node->data = nullptr;
         node->prev = nullptr;
         PODPool<LinkNode<T>>::POOL.recycle(node);
         count--;
@@ -90,11 +95,11 @@ public:
 
     void clear()
     {
-        while (head!= nullptr)
+        while (head != nullptr)
         {
             LinkNode<T>* temp = head->next;
             head->next = nullptr;
-            head->data=nullptr;
+            head->data = nullptr;
             head->prev = nullptr;
             PODPool<LinkNode<T>>::POOL.recycle(head);
             head = temp;
