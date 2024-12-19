@@ -19,15 +19,14 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -g")
 endif()
 
-
-file(GLOB_RECURSE LUA_SOURCES_C "lua-5.4.7/src/*.c")
-file(GLOB_RECURSE LUA_SOURCES_HEADER "lua-5.4.7/src/*.h")
-file(GLOB STB_IMAGE_SOURCES_H "src/stb_image/stb/*.h")
+#
+#file(GLOB_RECURSE LUA_SOURCES_C "lua-5.4.7/src/*.c")
+#file(GLOB_RECURSE LUA_SOURCES_HEADER "lua-5.4.7/src/*.h")
 
 add_executable(LinRasterizer src/main.cpp
 #        ${LUA_SOURCES_C}
 #        ${LUA_SOURCES_HEADER}
-        src/stb_image/stb/stb_image.h
+        include/stb_image.h
         include/L_math.h
         src/WindowHandle.cpp
         src/WindowHandle.h
