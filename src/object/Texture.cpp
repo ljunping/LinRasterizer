@@ -7,7 +7,7 @@
 #include "JobSystem.h"
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image/stb/stb_image.h"
+#include "stb_image.h"
 
 static void execute_init_lay0_mipmap(size_t begin, size_t end, void *global)
 {
