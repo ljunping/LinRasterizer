@@ -3,9 +3,7 @@
 //
 #include "WindowHandle.h"
 #include "Context.h"
-
 #include <iostream>
-
 #include "Camera.h"
 #include "EventSystem.h"
 #include "MeshRender.h"
@@ -42,9 +40,16 @@ RenderPass* Context::current_render_pass()
     return &render_passes[render_pass_index];
 }
 
-void Context::on_key_event(int key)
+void Context::on_key_event(KeySym key)
 {
-
+    switch (key)
+    {
+    case XK_1:
+        {
+            this->enable_ray_cast = !this->enable_ray_cast;
+            this->build_bvh = this->enable_ray_cast;
+        }
+    }
 }
 
 void Context::update(float t)
@@ -56,6 +61,21 @@ void Context::on_window_resize(int w, int h)
 {
     std::cout << "Context::on_window_resize(" << w << ", " << h << ")" << std::endl;
     EventSystem::dispatch_event(WindowSizeChange, w, h);
+}
+
+void Context::set_msaa_factor(int msaa_factor)
+{
+    if (msaa_factor != this->msaa_factor)
+    {
+        this->msaa_factor = msaa_factor;
+        EventSystem::dispatch_event(MSAAUpdate);
+    }
+}
+
+void Context::get_screen_size(int& w, int& h) const
+{
+    w = this->window_handle->w;
+    h = this->window_handle->h;
 }
 
 void Context::render()
@@ -78,8 +98,22 @@ void Context::render()
         for (int i = 0; i < render_passes.size(); ++i)
         {
             this->render_pass_index = i;
-            camera->render_pass(this);
+            camera->generate_primitive(this);
+            for (int j = 0; j < this->msaa_factor; ++j)
+            {
+                this->msaa_index = j;
+                camera->clear(this);
+                if (!this->enable_ray_cast)
+                {
+                    camera->raster_scene(this);
+                }else
+                {
+                    camera->ray_cast_scene(this);
+                }
+                camera->wait_finish();
+            }
         }
+        camera->render_fragment(this);
         camera->draw_end(this);
     }
     this->window_handle->draw_frame_buff();
@@ -109,7 +143,7 @@ void Context::main_loop()
     }
 }
 
-Color* Context::get_frame_buffer(int frame_id)
+Color* Context::get_frame_buffer(int frame_id) const
 {
     return this->window_handle->get_frame_buff(frame_id);
 }

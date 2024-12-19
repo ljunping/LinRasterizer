@@ -10,8 +10,15 @@
 #include <iostream>
 class DEBUG_NODE
 {
+#if __APPLE__
     std::chrono::steady_clock::time_point time_begin;
     std::chrono::steady_clock::time_point time_end;
+#endif
+
+#if __linux__
+    std::chrono::system_clock::time_point time_begin;
+    std::chrono::system_clock::time_point time_end;
+#endif
     long long elapsed_time;
     const char* prefix;
 public:

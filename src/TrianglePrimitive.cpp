@@ -89,12 +89,8 @@ Vec3 TrianglePrimitive::st_box_plane_normal[6] = {
     Vec3{1, 0, 0},
     Vec3{-1, 0, 0}
 };
-Box3D TrianglePrimitive::st_box(Vec3{-1, -1, -1},Vec3{1, 1, 1});
+Box<3> TrianglePrimitive::st_box(Vec3{-1, -1, -1},Vec3{1, 1, 1});
 
-
-TrianglePrimitive::~TrianglePrimitive()
-{
-}
 
 TrianglePrimitive::TrianglePrimitive(VertexAttribute& v0, VertexAttribute& v1, VertexAttribute& v2):
     id(0), inv_cross_dir_z(0),
@@ -103,9 +99,9 @@ TrianglePrimitive::TrianglePrimitive(VertexAttribute& v0, VertexAttribute& v1, V
     vert[0] = v0;
     vert[1] = v1;
     vert[2] = v2;
-    v0.get_attribute_value(0, v[0]);
-    v1.get_attribute_value(0, v[1]);
-    v2.get_attribute_value(0, v[2]);
+    v0.get_attribute_value(POS, v[0]);
+    v1.get_attribute_value(POS, v[1]);
+    v2.get_attribute_value(POS, v[2]);
     inv_w = Vec3::ONE;
 }
 
@@ -222,7 +218,7 @@ void TrianglePrimitive::clip()
         return;
     }
     clipped = true;
-    clip_vertices_alpha.clear();
+    clip_vert_count = 0;
     Vec3 min = fmin(st_box.min, box.min);
     Vec3 max = fmax(st_box.max, box.max);
     //两个box完全不相交
@@ -243,14 +239,19 @@ void TrianglePrimitive::clip()
             break;
         }
     }
-    clip_vertices.emplace_back(v[0]);
-    clip_vertices.emplace_back(v[1]);
-    clip_vertices.emplace_back(v[2]);
+    std::vector<Vec3> _clip_vertices;
+    clip_vertices[0] = v[0];
+    clip_vertices[1] = (v[1]);
+    clip_vertices[2] = (v[2]);
+    _clip_vertices.emplace_back(v[0]);
+    _clip_vertices.emplace_back(v[1]);
+    _clip_vertices.emplace_back(v[2]);
+    clip_vert_count = 3;
     if (!need_clip)
     {
-        clip_vertices_alpha.emplace_back(Vec3{1, 0, 0});
-        clip_vertices_alpha.emplace_back(Vec3{0, 1, 0});
-        clip_vertices_alpha.emplace_back(Vec3{0, 0, 1});
+        clip_vertices_alpha[0] = (Vec3{1, 0, 0});
+        clip_vertices_alpha[1] = (Vec3{0, 1, 0});
+        clip_vertices_alpha[2] = (Vec3{0, 0, 1});
         return;
     }
     std::vector<std::vector<float>> clip_alphas;
@@ -260,9 +261,8 @@ void TrianglePrimitive::clip()
     {
         clip_plane_normal.emplace_back( st_box_plane_normal[i]);
     }
-    Sutherland_Hodgman(clip_plane_normal, clip_plane_c, clip_vertices, &clip_alphas);
-    clip_vertices.resize(clip_alphas.size());
-    clip_vertices_alpha.resize(clip_alphas.size());
+    Sutherland_Hodgman(clip_plane_normal, clip_plane_c, _clip_vertices, &clip_alphas);
+    RUNTIME_ASSERT(clip_alphas.size()<=MAX_CLIP_VERT_COUNT,"clip_alphas.size()<=MAX_CLIP_VERT_COUNT");
     for (int i = 0; i < clip_alphas.size(); ++i)
     {
         auto& clip_alpha = clip_alphas[i];
@@ -271,6 +271,7 @@ void TrianglePrimitive::clip()
         clip_vertices_alpha[i][2] = clip_alpha[2];
         clip_vertices[i] = v[0] * clip_alpha[0] + v[1] * clip_alpha[1] + v[2] * clip_alpha[2];
     }
+    clip_vert_count = clip_alphas.size();
 }
 
 void TrianglePrimitive::reset()

@@ -42,7 +42,7 @@ public:
     Color* frame_buff = nullptr;
     void begin_render_pass(Context* ctx,RenderPass* pass);
     void end_render_pass(Context* ctx,RenderPass* pass);
-    virtual Color run(int frag_index);
+    virtual Vec4 run(int frag_index);
     ~FragShader() override = default;
     template <int N>
     void ddx(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result);
@@ -58,7 +58,7 @@ class TextureFragShader : public FragShader
 {
     INIT_TYPE(TextureFragShader, FragShader)
 public:
-    Color run(int frag_index) override;
+    Vec4 run(int frag_index) override;
 }
 ;
 template <int N>

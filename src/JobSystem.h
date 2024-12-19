@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <shared_mutex>
 #include <unordered_map>
+#include <deque>
 #include <utility>
 #include <vector>
 #include <thread>

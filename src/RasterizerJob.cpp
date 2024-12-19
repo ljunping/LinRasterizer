@@ -12,11 +12,23 @@
 #include "Mesh.h"
 #include "MeshRender.h"
 
+Vec2 MSAA_TEMPLATE_1[1] = {{0, 0}};
+Vec2 MSAA_TEMPLATE_2[2]={{-0.25, -0.25},{0.25, 0.25}};
+Vec2 MSAA_TEMPLATE_4[4]={{-0.375, -0.125},{0.125, -0.375},{-0.125, 0.375},{0.375, 0.125}};
+
+Vec2 msaa_template(int factor,int index)
+{
+    if(factor==1) return MSAA_TEMPLATE_1[index];
+    if(factor==2) return MSAA_TEMPLATE_2[index];
+    if(factor==4) return MSAA_TEMPLATE_4[index];
+    throw std::runtime_error("wrong factor");
+}
+
 void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end,  void* global_data)
 {
     Context* ctx = (Context*)global_data;
-    int w = ctx->window_handle->w;
-    int h = ctx->window_handle->h;
+    int w, h;
+    ctx->get_screen_size(w, h);
     auto current_render_pass = ctx->current_render_pass();
     RayCasterResult result;
     for (int idx = data_begin; idx < data_end; idx++)
@@ -63,6 +75,8 @@ void clear_context_execute(std::size_t data_begin, std::size_t data_end, void* g
 void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     Context* ctx = (Context*)global_data;
+    int w, h;
+    ctx->get_screen_size(w, h);
     auto current_render_pass = ctx->current_render_pass();
     auto& pass_node = current_render_pass->pass_node;
     auto background_color = pass_node.camera->background_color;
@@ -73,8 +87,8 @@ void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* glo
         {
             frame_buff[idx] = background_color;
         }
-        pass_node.camera->depth_buff[idx] = 1.f;
-        pass_node.camera->fragment_map[idx].triangle = nullptr;
+        pass_node.camera->depth_buff[idx + ctx->msaa_index * w * h] = 1.f;
+        pass_node.camera->fragment_map[idx + ctx->msaa_index * w * h].triangle = nullptr;
     }
 }
 
@@ -85,18 +99,51 @@ void clear_complete(std::size_t data_begin,std::size_t data_end, void* global_da
 
 void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
+    auto ctx = get_current_ctx();
+    int w, h;
+    ctx->get_screen_size(w, h);
     FragShader* frag_shader = (FragShader*)global_data;
     Color* frame_buff = frag_shader->frame_buff;
-    int w = frag_shader->width;
-    int h = frag_shader->height;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
-        auto& fragment = (*frag_shader->fragment_map)[idx];
-        int i = fragment.frag_coord[1], j = fragment.frag_coord[0];
-        auto tri = fragment.triangle;
-        if (tri)
+        Vec4 frag_color;
+        Vec4 sample_frag_color;
+        int i = idx / w, j = idx % w;
+        Vec4 dts_color = v_color4(frame_buff[(h - i - 1) * w + j]);
+        int sample_count = 0;
+        bool is_run_frag = false;
+        for (int f = 0; f < ctx->msaa_factor; ++f)
         {
-            frame_buff[(h - i - 1) * w + j] = frag_shader->run(i * w + j);
+            auto& fragment = (*frag_shader->fragment_map)[idx + f * w * h];
+            auto tri = fragment.triangle;
+            if (tri)
+            {
+                sample_count++;
+                if (!is_run_frag)
+                {
+                    is_run_frag = true;
+                    sample_frag_color = frag_shader->run(idx + f * w * h);
+                }
+                frag_color += sample_frag_color;
+            }else
+            {
+                frag_color += dts_color;
+            }
+        }
+        if (sample_count <= 0)
+            continue;
+        if (!ctx->enable_edge)
+        {
+            frag_color /= ctx->msaa_factor;
+            frame_buff[(h - i - 1) * w + j] = blend4(frag_color, dts_color, frag_color[3]);
+        }
+        else
+        {
+            if (sample_count < ctx->msaa_factor)
+            {
+                frag_color /= ctx->msaa_factor;
+                frame_buff[(h - i - 1) * w + j] = blend4(frag_color, dts_color, frag_color[3]);
+            }
         }
     }
 }
@@ -104,23 +151,23 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
 void prepare_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     Context* context = (Context*)global_data;
-    int w = context->window_handle->w;
-    int h = context->window_handle->h;
+    int w, h;
+    context->get_screen_size(w, h);
     auto current_render_pass = context->current_render_pass();
     auto& pass_node = current_render_pass->pass_node;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
-        auto lua_frag_shader = *Resource::get_resource<FragShader>(pass_node.frag_shader);
-        lua_frag_shader.width = w;
-        lua_frag_shader.height = h;
-        lua_frag_shader.fragment_map = &pass_node.camera->fragment_map;
-        auto fragment = &pass_node.camera->fragment_map[idx];
-        auto tri = fragment->triangle;
-        if (!tri)
-            continue;
-        tri->vert[0].attributes->create_vert_attribute(tri->vert[0], tri->vert[1], tri->vert[2],
-                                                       fragment->alpha,
-                                                       fragment->vertex_attribute);
+        for (int i = 0; i < context->msaa_factor; ++i)
+        {
+            auto fragment = &pass_node.camera->fragment_map[idx + i * w * h];
+            auto tri = fragment->triangle;
+            if (!tri)
+                continue;
+            tri->vert[0].attributes->create_vert_attribute(tri->vert[0], tri->vert[1], tri->vert[2],
+                                                           fragment->alpha,
+                                                           fragment->vertex_attribute);
+        }
+
     }
 }
 
@@ -141,7 +188,10 @@ void rast_tri_execute(std::size_t data_begin,std::size_t data_end, void* global_
         {
             continue;
         }
-        rast_tri(triangle_primitive, ctx);
+        for (int j = 0; j < ctx->msaa_factor; ++j)
+        {
+            rast_tri(triangle_primitive, ctx);
+        }
     }
 }
 
@@ -203,8 +253,26 @@ void complete_mvp_break_huge_triangle(std::size_t data_begin,std::size_t data_en
 }
 
 
+void view_transform(int w, int h, float st_x, float st_y, int& i, int& j)
+{
+    auto ctx = get_current_ctx();
+    auto offset = msaa_template(ctx->msaa_factor, ctx->msaa_index);
+    st_x -= offset[0] * 2 / (w - 1);
+    st_y -= offset[1] * 2 / (h - 1);
+    i = static_cast<int>((st_x * (w - 1) / 2) + (w - 1) * 1.0 / 2);
+    j = static_cast<int>((st_y * (h - 1) / 2) + (h - 1) * 1.0 / 2);
+}
+
+void invert_view_transform(int w, int h, int i, int j, float& st_x, float& st_y)
+{
+    auto ctx = get_current_ctx();
+    auto offset = msaa_template(ctx->msaa_factor, ctx->msaa_index);
+    st_x = (i * 2 - (w - 1)) * 1.0 / (w - 1) + offset[0] * 2 / (w - 1);
+    st_y = (j * 2 - (h - 1)) * 1.0 / (h - 1) + offset[1] * 2 / (h - 1);
+}
+
 void vert_view_transform(const L_MATH::Mat<float, 4, 4>& mvp, const int w, const int h,
-    VertexAttribute* vertex_attribute, L_MATH::Vec<float, 3>& alpha_, int& i, int& j)
+                         VertexAttribute* vertex_attribute, L_MATH::Vec<float, 3>& alpha_, int& i, int& j)
 {
     int xy[6];
     Vec3 alpha = vertex_attribute[0].alpha * alpha_[0] + vertex_attribute[1].alpha * alpha_[1] + vertex_attribute[2].
@@ -225,8 +293,9 @@ void vert_view_transform(const L_MATH::Mat<float, 4, 4>& mvp, const int w, const
 
 bool add_fragment(TrianglePrimitive& tri, Context* ctx,L_MATH::Vec<float, 3>& alpha, int i, int j)
 {
-    auto w = ctx->window_handle->w;
-    int index = i * w + j;
+    int w,h;
+    ctx->get_screen_size(w, h);
+    int index = i * w + j + w * h * ctx->msaa_index;
     auto st_z = tri.v[0][2] * alpha[0] + tri.v[1][2] * alpha[1] + tri.v[2][2] * alpha[2];
     auto current_render_pass = ctx->current_render_pass();
     auto& pass_node = current_render_pass->pass_node;
@@ -249,7 +318,7 @@ bool add_fragment(TrianglePrimitive& tri, Context* ctx,L_MATH::Vec<float, 3>& al
     fragment.alpha = alpha;
     fragment.resolution[0] = w;
     fragment.pass = current_render_pass;
-    fragment.resolution[1] = ctx->window_handle->h;
+    fragment.resolution[1] = h;
     return true;
 }
 
@@ -335,7 +404,7 @@ bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* bvh_tree, float si, float 
     Vec3 sv = Vec3({si, sj, -1});
     float min_z = -camera->far;
     bool _is_ray_caster = false;
-    auto box_distance = [](Box3D& box)
+    auto box_distance = [](Box<3>& box)
     {
         if (box.max[2] < 1 && box.min[2] > -1)
         {
@@ -378,19 +447,19 @@ bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* bvh_tree, float si, float 
 
 void rast_tri(TrianglePrimitive& tri, Context* ctx)
 {
-    auto h = ctx->window_handle->h;
-    auto w = ctx->window_handle->w;
+    int w,h;
+    ctx->get_screen_size(w, h);
     tri.clip();
+    auto vert_count = tri.clip_vert_count;
     auto& clip_vertices = tri.clip_vertices;
     auto& alpha_array = tri.clip_vertices_alpha;
-    if (clip_vertices.empty())
+    if (vert_count == 0)
     {
         return;
     }
-    int vert_count = clip_vertices.size();
     auto clip_vertices_int = new int[vert_count][2];
     int l_line = 0, top_line;
-    for (int i = 0; i < alpha_array.size(); ++i)
+    for (int i = 0; i < vert_count; ++i)
     {
         if (HUB_TRIANGLE_BREAK_COUNT_MAX == 0)
         {
@@ -412,7 +481,7 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
 
     int top_left_v = 0;
 
-    for (int i = 0; i < clip_vertices.size(); ++i)
+    for (int i = 0; i < vert_count; ++i)
     {
         if (clip_vertices_int[i][1] < l_y)
         {
@@ -537,7 +606,6 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
             invert_view_transform(w, h, rx, ry, st_r[0], st_r[1]);
             tri.barycentric(st_r, r_alpha);
             add_fragment(tri, ctx, r_alpha, ry, rx);
-
         }
         next_right = false;
         next_left = false;

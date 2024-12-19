@@ -8,10 +8,11 @@
 
 #ifdef WINDOW_X11
 #include <X11/Xlib.h>
+#define XK_MISCELLANY
+#define XK_LATIN1
+#include <X11/keysymdef.h>
 #endif
 #include "Color.h"
-#include "Context.h"
-#include "L_math.h"
 
 #define MAX_FRAME_BUFFERS 2
 class WindowHandle

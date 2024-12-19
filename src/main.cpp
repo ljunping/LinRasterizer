@@ -15,7 +15,7 @@ int next_layer()
 Transform* simple_tri()
 {
     //mesh
-    float z = -300;
+    float z = -200;
     float r = 200;
     float *vert_buff = new float[30]{
         -r, 0, 0, 0, 0,
@@ -32,7 +32,7 @@ Transform* simple_tri()
     _Mesh->bind_attribute (UV, 2, 3, 5);
     auto camera = parent->add_component<Camera>(0.1f, 1000.0f, 120, 640 * 1.0 / 480, true);
     camera->render_layer = next_layer();
-    parent->local_pos = Vec3{0, 0, z};
+    parent->local_pos = Vec3{-1, 0, z};
     parent->local_scale = Vec3{1, 1, 1};
     parent->local_euler_angles = Vec3{50, 0, 0};
     auto texture = Resource::get_or_create_resource<Texture>("black_white_box.png", "black_white_box.png", true);
@@ -76,16 +76,6 @@ Transform* create_obj_model_node(const char* file_name)
     return parent;
 }
 
-void parallel_sort_test()
-{
-    std::vector<int> list;
-    for (int i = 0; i < 1000000; ++i)
-    {
-        list.push_back(rand() % 10000000);
-    }
-    PERFORMANCE_DEBUG(parallel_sort)
-    parallel_sort(list.begin(), list.end());
-}
 
 int main()
 {
@@ -96,8 +86,10 @@ int main()
     auto ctx = get_current_ctx();
     ctx->enable_ray_cast = false;
     ctx->build_bvh = false;
+    ctx->msaa_factor = 4;
+    ctx->enable_edge = false;
     ctx->root->add_child(create_obj_model_node("pig/16433_Pig.obj"));
-    ctx->root->add_child(simple_tri());
+    // ctx->root->add_child(simple_tri());
     ctx->main_loop();
     return 0;
 }

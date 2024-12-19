@@ -355,7 +355,7 @@ namespace L_MATH
         }
 
 
-        explicit Vec(std::initializer_list<T> list)
+        Vec(std::initializer_list<T> list)
         {
             if (list.size() != Col) return;
             if constexpr (Col == 3)

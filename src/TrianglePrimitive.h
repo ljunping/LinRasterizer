@@ -8,18 +8,18 @@
 #include <vector>
 #include "L_math.h"
 #include "Mesh.h"
-#include "Box3D.h"
+#include "Box.h"
 
-class VertexAttribute;
-
-class alignas(16) TrianglePrimitive:public BVHInterface
+#define MAX_CLIP_VERT_COUNT 8
+struct  VertexAttribute;
+//这个类纯数据类，不要继承其他类，不能执行析构函数
+struct  alignas(16) TrianglePrimitive
 {
-public:
-    static Box3D st_box;
+    static Box<3> st_box;
     static Vec3 st_box_plane_normal[6];
+    Box<3> box;
     VertexAttribute vert[3];
     TrianglePrimitive() = default;
-    ~TrianglePrimitive();
     int id;
     alignas(16) Vec3 v[3];
     Vec3 normal_dir;
@@ -31,8 +31,9 @@ public:
     bool discard=false;
     float d;
     Vec3 inv_w;
-    std::vector<Vec3> clip_vertices;
-    std::vector<Vec3> clip_vertices_alpha;
+    Vec3 clip_vertices[MAX_CLIP_VERT_COUNT];
+    Vec3 clip_vertices_alpha[MAX_CLIP_VERT_COUNT];
+    int clip_vert_count = 0;
     TrianglePrimitive(VertexAttribute& v0, VertexAttribute& v1, VertexAttribute& v2);
     bool ccw() const;
     Vec3 normal() const;
@@ -40,8 +41,8 @@ public:
     bool inside(const Vec3& point) const;
     bool is_same_sign(const Vec3& alpha) const;
     float intersect_plane(const Vec3& point,const Vec3& dir) const;
-    bool intersect_3D(const L_MATH::Vec<float, 3>& point, const Vec3& dir, RayCasterResult* result) override;
-    bool intersect_2D(const L_MATH::Vec<float, 3>& point, RayCasterResult* result) override;
+    bool intersect_3D(const L_MATH::Vec<float, 3>& point, const Vec3& dir, RayCasterResult* result);
+    bool intersect_2D(const L_MATH::Vec<float, 3>& point, RayCasterResult* result);
     void barycentric(const L_MATH::Vec<float, 3>&, L_MATH::Vec<float, 3>& alpha) const;
     void update(const Mat44& mat);
     void update_param();

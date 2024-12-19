@@ -4,7 +4,6 @@ project(LinRasterizer)
 set(CMAKE_CXX_STANDARD 20)
 find_package(X11 REQUIRED)
 find_package(assimp REQUIRED)
-find_package(TBB REQUIRED)
 set(RESOURCE_DIR ${CMAKE_SOURCE_DIR}/resources)
 
 
@@ -32,8 +31,8 @@ add_executable(LinRasterizer src/main.cpp
         include/L_math.h
         src/WindowHandle.cpp
         src/WindowHandle.h
-        src/Box3D.cpp
-        src/Box3D.h
+        src/Box.cpp
+        src/Box.h
         src/TrianglePrimitive.cpp
         src/TrianglePrimitive.h
         src/object/Camera.cpp
@@ -84,7 +83,6 @@ target_include_directories(LinRasterizer PRIVATE ./src/object)
 
 target_link_libraries(LinRasterizer ${X11_LIBRARIES})
 target_link_libraries(LinRasterizer ${ASSIMP_LIBRARIES})
-target_link_libraries(LinRasterizer TBB::tbb)
 
 target_compile_definitions(LinRasterizer PRIVATE WINDOW_X11)
 target_compile_definitions(LinRasterizer PRIVATE LUA_LIBRARY)

@@ -5,7 +5,7 @@
 #ifndef RASTERIZERJOB_H
 #define RASTERIZERJOB_H
 #include "Color.h"
-
+#include <vector>
 
 class BVHTree;
 class VertexAttribute;
@@ -16,23 +16,20 @@ class TrianglePrimitive;
 inline float HUGE_TRIANGLE_THR = 0.5;
 inline int HUB_TRIANGLE_BREAK_COUNT_MAX = 0;
 inline constexpr int CCW[] = {0, 1, 2, 1, 2, 0, 2, 0, 1};
+extern Vec2 MSAA_TEMPLATE_1[1];
+extern Vec2 MSAA_TEMPLATE_2[2];
+extern Vec2 MSAA_TEMPLATE_4[4];
+
+Vec2 msaa_template(int factor,int index);
 
 
-inline void view_transform(const int w, const int h, float st_x, float st_y, int& i,
-                           int& j)
-{
-    i = static_cast<int>((st_x * (w - 1) / 2) + (w - 1) * 1.0 / 2);
-    j = static_cast<int>((st_y * (h - 1) / 2) + (h - 1) * 1.0 / 2);
-}
+void view_transform(int w, int h, float st_x, float st_y, int& i,
+                    int& j);
 
-inline void invert_view_transform(const int w, const int h, int i, int j, float &st_x, float &st_y)
-{
-    st_x = (i * 2 - (w - 1))*1.0 / (w - 1);
-    st_y = (j * 2 - (h - 1))*1.0 / (h - 1);
-}
+void invert_view_transform(int w, int h, int i, int j, float& st_x, float& st_y);
 
 
-inline void vert_view_transform(const Mat44& mvp, const int w, const int h, VertexAttribute* vertex_attribute,
+void vert_view_transform(const Mat44& mvp, const int w, const int h, VertexAttribute* vertex_attribute,
                                 Vec3& alpha_, int& i,
                                 int& j);
 

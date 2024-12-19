@@ -11,7 +11,7 @@
 enum EventType
 {
     WindowSizeChange,
-
+    MSAAUpdate,
 };
 struct EventParam
 {

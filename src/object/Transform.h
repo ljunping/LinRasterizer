@@ -4,9 +4,9 @@
 
 #ifndef TRANSFORM_H
 #define TRANSFORM_H
+#include <atomic>
 #include "Component.h"
 #include "Context.h"
-
 
 enum DirtyFlag
 {

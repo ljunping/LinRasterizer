@@ -19,14 +19,8 @@ class Camera : public Component
     bool is_proj;
     void update_view_mat();
     void update_projection_mat();
-    int ray_cast_scene(Context* ctx);
-    int render_fragment(Context* ctx);
-    int clear_color(Context* ctx);
-    int raster_scene(Context* ctx);
-    void wait_render_finish();
-    bool is_render_job_finish(int job_group_id) const;
 
-    void get_proj_triangle_list(Context* ctx);
+    bool is_render_job_finish(int job_group_id) const;
     int frame_begin_job_id = 0;
     int frame_cur_max_job_id = 0;
     void update_frame_job_id(int job_group_id);
@@ -45,9 +39,14 @@ public:
     Vec3 pos;
     Vec3 look_dir = L_MATH::FORWARD;
     float near, far, fov, ratio;
-    void render_pass(Context* ctx);
+    int render_fragment(Context* ctx);
     void draw_begin(Context* ctx);
     void draw_end(Context* ctx);
+    int ray_cast_scene(Context* ctx);
+    int raster_scene(Context* ctx);
+    void generate_primitive(Context* ctx);
+    void wait_finish();
+    int clear(Context* ctx);
     bool is_render_layer(int sort_layer) const;
 }
 

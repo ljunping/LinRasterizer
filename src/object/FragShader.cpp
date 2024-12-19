@@ -31,27 +31,27 @@ void FragShader::end_render_pass(Context* ctx,RenderPass* pass)
 
 
 
-Color FragShader::run(int frag_index )
+Vec4 FragShader::run(int frag_index )
 {
     auto frag = &(*this->fragment_map)[frag_index];
     auto& alpha = frag->alpha;
-    // auto& v1 = frag->triangle->vert[0];
-    // auto& v2 = frag->triangle->vert[1];
-    // auto& v3 = frag->triangle->vert[2];
-    // Vec3 c1, c2, c3;
-    // v1.get_attribute_value(1, c1);
-    // v2.get_attribute_value(1, c2);
-    // v3.get_attribute_value(1, c3);
-    // Vec3 frag_color = c1 * alpha[0] + c2 * alpha[1] + c3 * alpha[2];
-    return GREEN;
+    return v_color4(GREEN);
 }
 
-Color TextureFragShader::run(int frag_index)
+Vec4 TextureFragShader::run(int frag_index)
 {
-    auto frag = &(*this->fragment_map)[frag_index];
-    Vec4 frag_color;
-    this->sample_texture(frag_index, texture, frag_color);
-    return color(frag_color);
+    if (texture && texture->channels == 3)
+    {
+        Vec3 frag_color;
+        this->sample_texture(frag_index, texture, frag_color);
+        return Vec4(frag_color, 1);
+    }
+    if (texture && texture->channels == 4)
+    {
+        Vec4 frag_color;
+        this->sample_texture(frag_index, texture, frag_color);
+        return frag_color;
+    }
 }
 
 

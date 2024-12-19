@@ -12,16 +12,19 @@
 #include "WindowHandle.h"
 
 
-static void window_resize(int w, int h, Camera* camera)
+static void window_resize(Camera* camera)
 {
-    ((Camera*)camera)->fragment_map.resize(w * h);
-    ((Camera*)camera)->depth_buff.resize(w * h);
+    auto current_ctx = get_current_ctx();
+    int w, h;
+    current_ctx->get_screen_size(w, h);
+    camera->fragment_map.resize(w * h * current_ctx->msaa_factor * current_ctx->msaa_factor);
+    camera->depth_buff.resize(w * h * current_ctx->msaa_factor * current_ctx->msaa_factor);
     camera->ratio = w / (float)h;
 }
 
 static void window_resize(EventParam& param, void* camera)
 {
-    window_resize(param.m_n1, param.m_n2, (Camera*)camera);
+    window_resize((Camera*)camera);
 }
 
 void Camera::update_view_mat()
@@ -47,7 +50,7 @@ Camera::Camera(float near, float far, float fov, float ratio, bool isproj): Comp
 }
 
 
-void Camera::get_proj_triangle_list(Context* ctx)
+void Camera::generate_primitive(Context* ctx)
 {
     update_view_mat();
     update_projection_mat();
@@ -109,8 +112,10 @@ void Camera::on_create()
 {
     Component::on_create();
     EventSystem::register_listener(WindowSizeChange, window_resize, (void*)this);
+    EventSystem::register_listener(MSAAUpdate, window_resize, (void*)this);
+
     auto current_ctx = get_current_ctx();
-    window_resize(current_ctx->window_handle->w, current_ctx->window_handle->h, this);
+    window_resize(this);
     current_ctx->cameras.push_back(this);
 }
 
@@ -119,16 +124,12 @@ void Camera::on_delete()
     auto& cameras = get_current_ctx()->cameras;
     cameras.erase(std::find(cameras.begin(), cameras.end(), this));
     EventSystem::unregister_listener(WindowSizeChange, window_resize, this);
+    EventSystem::unregister_listener(MSAAUpdate, window_resize, (void*)this);
     Component::on_delete();
 }
 
 
-void Camera::render_pass(Context* ctx)
-{
-    this->get_proj_triangle_list(ctx);
-    this->raster_scene(ctx);
-    this->render_fragment(ctx);
-}
+
 
 
 bool Camera::is_render_layer(int sort_layer) const
@@ -139,9 +140,11 @@ bool Camera::is_render_layer(int sort_layer) const
 
 int Camera::ray_cast_scene(Context* ctx)
 {
+    int w, h;
+    ctx->get_screen_size(w, h);
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, ctx->window_handle->w * ctx->window_handle->h,
+                          0, w * h,
                           ctx, ray_cast_frag_execute, ray_cast_frag_complete);
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);
@@ -150,20 +153,23 @@ int Camera::ray_cast_scene(Context* ctx)
 
 int Camera::render_fragment(Context* ctx)
 {
+    int w, h;
+    ctx->get_screen_size(w, h);
     auto current_render_pass = ctx->current_render_pass();
     auto frag_shader = Resource::get_resource<FragShader>(current_render_pass->pass_node.frag_shader);
     frag_shader->begin_render_pass(ctx, current_render_pass);
     auto prepare_fence = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(prepare_fence, 0,
-                          0, ctx->window_handle->w * ctx->window_handle->h,
+                          0, w * h,
                           ctx, prepare_frag_shader_execute, default_complete);
+
 
 
     JOB_SYSTEM.submit_job_group(prepare_fence);
 
     auto job_group = JOB_SYSTEM.create_job_group(prepare_fence);
     JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, ctx->window_handle->w * ctx->window_handle->h,
+                          0, w * h,
                           frag_shader, run_frag_shader_execute, run_frag_shader_complete);
 
     JOB_SYSTEM.submit_job_group(job_group);
@@ -172,14 +178,15 @@ int Camera::render_fragment(Context* ctx)
 }
 
 
-int Camera::clear_color(Context* ctx)
+int Camera::clear(Context* ctx)
 {
+    int w, h;
+    ctx->get_screen_size(w, h);
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
 
     JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, ctx->window_handle->w * ctx->window_handle->h,
+                          0, w * h,
                           ctx, clear_camera_execute, clear_complete);
-
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);
     return job_group;
@@ -188,10 +195,6 @@ int Camera::clear_color(Context* ctx)
 
 int Camera::raster_scene(Context* ctx)
 {
-    if (ctx->enable_ray_cast)
-    {
-        return ray_cast_scene(ctx);
-    }
     auto render_pass = ctx->current_render_pass();
     auto tri_count = render_pass->primitives.size();
     if (tri_count == 0)
@@ -207,7 +210,7 @@ int Camera::raster_scene(Context* ctx)
     return job_group;
 }
 
-void Camera::wait_render_finish()
+void Camera::wait_finish()
 {
     JOB_SYSTEM.wait_job_group_finish(frame_cur_max_job_id);
 }
@@ -229,12 +232,11 @@ void Camera::draw_begin(Context* ctx)
 {
     frame_cur_max_job_id = 0;
     frame_begin_job_id = 0;
-    clear_color(ctx);
 }
 
 void Camera::draw_end(Context* ctx)
 {
-    wait_render_finish();
+    wait_finish();
     auto current_render_pass = ctx->current_render_pass();
     auto frag_shader = Resource::get_resource<FragShader>(current_render_pass->pass_node.frag_shader);
     frag_shader->end_render_pass(ctx, current_render_pass);

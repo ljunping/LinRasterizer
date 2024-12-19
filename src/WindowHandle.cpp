@@ -1,23 +1,19 @@
 
 #include "WindowHandle.h"
-#include <thread>
 #include "Color.h"
 #include "Context.h"
-#include "debug.h"
-#include "DrawUtil.h"
 #include "JobSystem.h"
-
 
 #if WINDOW_X11
 
 #include <iostream>
-#include <X11/keysym.h>
-#include<X11/Xlib.h>
+
 
 
 
 WindowHandle::WindowHandle(int x, int y, int w, int h): x(x), y(y), w(w), h(h)
 {
+
     for (int i = 0; i < MAX_FRAME_BUFFERS; ++i)
     {
         frame_buffs[i] = nullptr;
@@ -52,8 +48,8 @@ void WindowHandle::event_loop()
         {
             // 获取按键事件
             KeySym keysym = XLookupKeysym(&event.xkey, 0); // 获取 keysym，0 表示不使用修饰键
-
             on_key_event(keysym);
+
         }
     }
 }

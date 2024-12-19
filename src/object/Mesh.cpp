@@ -215,9 +215,9 @@ void Mesh::generate_triangle(int v0, int v1, int v2,TrianglePrimitive& result) c
     create_vert_attribute(v0, v1, v2,Vec3{1, 0, 0}, result.vert[0]);
     create_vert_attribute(v0, v1, v2,Vec3{0, 1, 0}, result.vert[1]);
     create_vert_attribute(v0, v1, v2,Vec3{0, 0, 1}, result.vert[2]);
-    result.vert[0].get_attribute_value(0, result.v[0]);
-    result.vert[1].get_attribute_value(0, result.v[1]);
-    result.vert[2].get_attribute_value(0, result.v[2]);
+    result.vert[0].get_attribute_value(POS, result.v[0]);
+    result.vert[1].get_attribute_value(POS, result.v[1]);
+    result.vert[2].get_attribute_value(POS, result.v[2]);
     result.inv_w = Vec3::ONE;
 }
 
@@ -241,10 +241,6 @@ float* Mesh::operator[](int vert_index) const
 
 void VertexAttribute::calculate_values()
 {
-    if (values.size() != attributes->vert_data_length)
-    {
-        values.resize(attributes->vert_data_length);
-    }
     for (int i = 0; i < attributes->vert_data_length; ++i)
     {
         values[i] = (*attributes)[v[0]][i] * alpha[0] + (*attributes)[v[1]][i] * alpha[1] + (*attributes)[v[2]][i] *

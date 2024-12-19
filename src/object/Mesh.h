@@ -14,7 +14,6 @@ class Mesh;
 class TrianglePrimitive;
 enum AttributeType
 {
-    INVALID,
     POS,
     NORMAL,
     COLOR,
@@ -29,12 +28,11 @@ struct AttributeDataFormat
     int offset;
     int stride;
 };
-
-class VertexAttribute
+//这个类纯数据类，不要继承其他类，不能执行析构函数
+struct  VertexAttribute
 {
-public:
     const Mesh* attributes;
-    std::vector<float> values;
+    float values[AttributeTypeCount * 4];
     int v[3];
     int data_count = 0;
     Vec3 alpha;

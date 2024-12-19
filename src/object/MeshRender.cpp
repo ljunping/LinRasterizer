@@ -3,7 +3,9 @@
 //
 
 #include "MeshRender.h"
-
+#if __linux__
+#include <bits/ranges_algo.h>
+#endif
 #include "Context.h"
 #include "Transform.h"
 
@@ -42,20 +44,24 @@ bool RenderPass::try_add_render_node(RenderNode& node)
 
 RenderPass::~RenderPass()
 {
-    delete[] tri_pool;
+    free(this->tri_pool);
     delete bvh_tree;
 }
 
 void RenderPass::assign_triangle_primitives(int size)
 {
-    primitives.resize(size);
-    this->tri_pool = new TrianglePrimitive[size];
+    if (primitives.size() != size)
+    {
+        primitives.resize(size);
+        free(this->tri_pool);
+        this->tri_pool = static_cast<TrianglePrimitive*>(malloc(size * sizeof(TrianglePrimitive)));
+    }
 }
 
 void RenderPass::build_bvh_tree()
 {
     this->bvh_tree = new BVHTree();
-    this->bvh_tree->build<TrianglePrimitive>(this->primitives);
+    this->bvh_tree->build(this->primitives);
 }
 
 void RenderComponent::on_create()
