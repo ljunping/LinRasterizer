@@ -16,11 +16,23 @@ Vec2 MSAA_TEMPLATE_1[1] = {{0, 0}};
 Vec2 MSAA_TEMPLATE_2[2]={{-0.25, -0.25},{0.25, 0.25}};
 Vec2 MSAA_TEMPLATE_4[4]={{-0.375, -0.125},{0.125, -0.375},{-0.125, 0.375},{0.375, 0.125}};
 
+Vec2 EDGE_MSAA_TEMPLATE_2[2]={{-0.5, -0.5},{0.5, 0.5}};
+Vec2 EDGE_MSAA_TEMPLATE_4[4]={{-0.5, -0.5},{0.5, -0.5},{-0.5, 0.5},{0.5, 0.5}};
+
+
 Vec2 msaa_template(int factor,int index)
 {
     if(factor==1) return MSAA_TEMPLATE_1[index];
     if(factor==2) return MSAA_TEMPLATE_2[index];
     if(factor==4) return MSAA_TEMPLATE_4[index];
+    throw std::runtime_error("wrong factor");
+}
+
+
+Vec2 edge_msaa_template(int factor,int index)
+{
+    if(factor==2) return EDGE_MSAA_TEMPLATE_2[index];
+    if(factor==4) return EDGE_MSAA_TEMPLATE_4[index];
     throw std::runtime_error("wrong factor");
 }
 
@@ -113,33 +125,35 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
     Color* frame_buff = frag_shader->frame_buff;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
-        auto& _fragment = (*frag_shader->fragment_map)[idx];
-        if (_fragment.draw_call != draw_call)
-        {
-            continue;
-        }
         Vec4 frag_color;
         Vec4 sample_frag_color;
         int i = idx / w, j = idx % w;
         Vec4 dts_color = v_color4(frame_buff[(h - i - 1) * w + j]);
-
         int sample_count = 0;
         bool is_run_frag = false;
         for (int f = 0; f < ctx->msaa_factor; ++f)
         {
             auto& fragment = (*frag_shader->fragment_map)[idx + f * w * h];
-
+            if (fragment.draw_call != draw_call)
+            {
+                continue;
+            }
             auto tri = fragment.triangle;
             if (tri)
             {
                 sample_count++;
+                if (ctx->enable_edge)
+                {
+                    continue;
+                }
                 if (!is_run_frag)
                 {
                     is_run_frag = true;
                     sample_frag_color = frag_shader->run(idx + f * w * h);
                 }
                 frag_color += sample_frag_color;
-            }else
+            }
+            else
             {
                 frag_color += dts_color;
             }
@@ -155,8 +169,7 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
         {
             if (sample_count < ctx->msaa_factor)
             {
-                frag_color /= ctx->msaa_factor;
-                frame_buff[(h - i - 1) * w + j] = blend4(frag_color, dts_color, frag_color[3]);
+                frame_buff[(h - i - 1) * w + j] = ctx->edge_color;
             }
         }
     }
@@ -171,21 +184,18 @@ void prepare_frag_shader_execute(std::size_t data_begin,std::size_t data_end, vo
     auto& pass_node = current_render_pass->pass_node;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
-        auto fragment = &pass_node.camera->fragment_map[idx];
-        if (fragment->draw_call != current_render_pass)
-        {
-            continue;
-        }
+
         for (int i = 0; i < context->msaa_factor; ++i)
         {
             auto fragment = &pass_node.camera->fragment_map[idx + i * w * h];
             auto tri = fragment->triangle;
-            if (!tri)
+            if (!tri||(fragment->draw_call != current_render_pass))
+            {
                 continue;
+            }
             tri->vert[0].attributes->create_vert_attribute(tri->vert[0], tri->vert[1], tri->vert[2],
                                                            fragment->alpha,
                                                            fragment->vertex_attribute);
-            break;
         }
     }
 }
@@ -199,7 +209,8 @@ void run_frag_shader_complete(std::size_t data_begin,std::size_t data_end, void*
 void rast_tri_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     auto ctx = (Context*)global_data;
-    auto& triangle_primitives = ctx->render_passes.back().primitives;
+    auto current_render_pass = ctx->current_render_pass();
+    auto& triangle_primitives = current_render_pass->primitives;
     for (int i = data_begin; i < data_end; ++i)
     {
         auto& triangle_primitive = *triangle_primitives[i];
@@ -369,7 +380,14 @@ void complete_mvp_break_huge_triangle(std::size_t data_begin,std::size_t data_en
 void view_transform(int w, int h, float st_x, float st_y, int& i, int& j)
 {
     auto ctx = get_current_ctx();
-    auto offset = msaa_template(ctx->msaa_factor, ctx->msaa_index);
+    Vec2 offset;
+    if(ctx->enable_edge)
+    {
+        offset = edge_msaa_template(ctx->msaa_factor, ctx->msaa_index);
+    }else
+    {
+        offset = msaa_template(ctx->msaa_factor, ctx->msaa_index);
+    }
     st_x -= offset[0] * 2 / (w - 1);
     st_y -= offset[1] * 2 / (h - 1);
     i = static_cast<int>((st_x * (w - 1) / 2) + (w - 1) * 1.0 / 2);
@@ -379,7 +397,14 @@ void view_transform(int w, int h, float st_x, float st_y, int& i, int& j)
 void invert_view_transform(int w, int h, int i, int j, float& st_x, float& st_y)
 {
     auto ctx = get_current_ctx();
-    auto offset = msaa_template(ctx->msaa_factor, ctx->msaa_index);
+    Vec2 offset;
+    if(ctx->enable_edge)
+    {
+        offset = edge_msaa_template(ctx->msaa_factor, ctx->msaa_index);
+    }else
+    {
+        offset = msaa_template(ctx->msaa_factor, ctx->msaa_index);
+    }
     st_x = (i * 2 - (w - 1)) * 1.0 / (w - 1) + offset[0] * 2 / (w - 1);
     st_y = (j * 2 - (h - 1)) * 1.0 / (h - 1) + offset[1] * 2 / (h - 1);
 }
@@ -409,6 +434,10 @@ bool add_fragment(TrianglePrimitive& tri, Context* ctx,L_MATH::Vec<float, 3>& al
     int w,h;
     ctx->get_screen_size(w, h);
     int index = i * w + j + w * h * ctx->msaa_index;
+    if (i * w + j == 76912)
+    {
+        int x1 = 1;
+    }
     auto st_z = tri.v[0][2] * alpha[0] + tri.v[1][2] * alpha[1] + tri.v[2][2] * alpha[2];
     auto current_render_pass = ctx->current_render_pass();
     auto& pass_node = current_render_pass->pass_node;

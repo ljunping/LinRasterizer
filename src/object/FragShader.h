@@ -11,6 +11,7 @@
 #include "Texture.h"
 #include "Resource.h"
 #include "CommonMacro.h"
+#include "Context.h"
 
 
 class Context;
@@ -90,9 +91,11 @@ void FragShader::ddy(int frag_index, int attribute_index, L_MATH::Vec<float, N>&
 template <int N>
 void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_MATH::Vec<float, N> &result)
 {
-    int size = (frag_index_l / (width * height) + 1) * (width * height);
+    int msaa_index = frag_index_l / (width * height);
+    int r_size = (msaa_index + 1) * (width * height);
+    int l_size = msaa_index * (width * height);
     auto& fragments = *fragment_map;
-    if (frag_index_l < 0 || frag_index_l >= size || frag_index_r < 0 || frag_index_r >= size)
+    if (frag_index_l < l_size || frag_index_l >= r_size || frag_index_r < l_size || frag_index_r >= r_size)
     {
         return;
     }
@@ -102,7 +105,7 @@ void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_M
     {
         return;
     }
-    if (fragment_l.vertex_attribute.attributes!=fragment_r.vertex_attribute.attributes)
+    if (fragment_l.vertex_attribute.attributes != fragment_r.vertex_attribute.attributes)
     {
         return;
     }
@@ -115,18 +118,31 @@ void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_M
 template <int N>
 void FragShader::sample_texture(int frag_index, Texture* texture, L_MATH::Vec<float, N>& result)
 {
-    Vec2 dx, dy;
     Vec2 uv;
+    auto ctx = get_current_ctx();
     auto& fragment = (*fragment_map)[frag_index];
+    if (!ctx->enable_mipmap)
+    {
+        const unsigned char*  _res;
+        fragment.vertex_attribute.get_attribute_value(UV, uv);
+        texture->texture_raw(uv, _res);
+        for (int i = 0; i < N; ++i)
+        {
+            result[i] = float(_res[i]) / float(255);
+        }
+        return;
+    }
+    unsigned char _res[N];
+    Vec2 dx, dy;
+    fragment.vertex_attribute.get_attribute_value(UV, uv);
     ddx(frag_index, UV, dx);
     ddy(frag_index, UV, dy);
-    fragment.vertex_attribute.get_attribute_value(UV, uv);
     if (!texture)
     {
         return;
     }
     Vec2 lod;
-    unsigned char _res[N];
+
     lod[0] = L_MATH::dot(dx, dx);
     lod[1] = L_MATH::dot(dy, dy);
     texture->sample(uv, lod, _res);

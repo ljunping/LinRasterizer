@@ -35,6 +35,8 @@ public:
     bool build_bvh;
     bool enable_ray_cast;
     bool enable_edge = false;
+    bool enable_mipmap = true;
+    Color edge_color = GREEN;
     int msaa_factor = 1;
     std::vector<std::tuple<void(*)(Context* context, Color* buff, void* data), void*>> after_scene_render_funcs;
     std::vector<DrawCall> render_passes;

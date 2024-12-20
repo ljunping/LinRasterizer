@@ -86,6 +86,13 @@ void Texture::texture_raw(int x, int y, const unsigned char *&result)
     result = (data.get() + index);
 }
 
+void Texture::texture_raw(const L_MATH::Vec<float, 2>& uv, const unsigned char*& result)
+{
+    auto x = floor(uv[0] * width);
+    auto y = floor(uv[1] * height);
+    texture_raw(x, y, result);
+}
+
 void Texture::texture_mipmap_minify(int x, int y, int level, const unsigned char *&result)
 {
     auto &mip_map = mip_maps[level];

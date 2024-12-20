@@ -41,6 +41,8 @@ make
 通过BVH和优先队列加速RayCast(光线投射)
 ###### 4、纹理加载
 基于"stb_image.h"开源库，读取图片数据。实现magnify、minify、mipmap等纹理基本功能
+
+![mipmap_compare.png](render_img/mipmap_compare.png)
 ###### 5、.obj模型加载
 基于Assimp库加载obj模型，转换为自定义mesh。下图加载了"resources/pig/16433_Pig.obj"文件
 ![img.png](render_img/img_obj.png)
@@ -57,7 +59,10 @@ make
 ###### 7、JobSystem并行
 实现了任务并行化、任务调取、任务窃取机制。具体性能数据列于性能测试
 ###### 8、ECS架构
-类似UNITY引擎，具备GetComponent<T>()、RemoveComponent<T>等基本方法。实现了Transform、Camera、MeshRender等核心组件.
+类似UNITY引擎，具备GetComponent<T>()、RemoveComponent<T>等基本方法。实现了Transform、Camera、MeshRender等核心组件。
+下面多meshRender的效果
+
+![muti_obj.png](render_img/muti_obj.png)
 ###### 9、性能测试
 设备Macbook Pro2023 14寸笔记本电脑。渲染"resources/pig/16433_Pig.obj"文件，包含了120576个三角形。分辨率640*480.默认 release build
 在不同的MSAA倍率下，光线投射和光栅化两种渲染模式的平均帧率如下

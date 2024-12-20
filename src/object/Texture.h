@@ -28,6 +28,8 @@ public:
     bool mipmap = false;
     std::vector<TextureLayer> mip_maps;
     void texture_raw(int x, int y, const unsigned char*& result);
+    void texture_raw(const Vec2& uv, const unsigned char*& result);
+
     void texture_mipmap_minify(int x, int y, int level, const unsigned char*& result);
     void texture_mipmap_magnify(int x, int y, int level, unsigned char*& result);
     void texture_mipmap_minify(const Vec2& uv, int level, unsigned char*& result);
