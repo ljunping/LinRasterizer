@@ -54,7 +54,6 @@ add_executable(LinRasterizer src/main.cpp
         src/RasterizerJob.cpp
         src/BresenhamLine.h
         src/VectorRemoveEasy.h
-        src/DrawUtil.h
         src/object/Texture.cpp
         src/object/Texture.h
         src/object/Material.cpp

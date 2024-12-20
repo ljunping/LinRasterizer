@@ -20,7 +20,7 @@ struct  alignas(16) TrianglePrimitive
     Box<3> box;
     VertexAttribute vert[3];
     TrianglePrimitive() = default;
-    int id;
+    int id{};
     alignas(16) Vec3 v[3];
     Vec3 normal_dir;
     Vec3 cross_dir;

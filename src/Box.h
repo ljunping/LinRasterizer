@@ -16,7 +16,6 @@ struct RayCasterResult
     TrianglePrimitive* triangle;
     Vec3 alpha;
     float t;
-    float z;
 };
 template<int N>
 class alignas(16) Box;

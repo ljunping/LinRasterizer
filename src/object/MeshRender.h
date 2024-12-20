@@ -29,7 +29,7 @@ inline bool less_compare_render_node(const RenderNode& a, const RenderNode& b);
 
 inline bool equal_compare_render_node(const RenderNode& a, const RenderNode& b);
 
-struct RenderPass
+struct DrawCall
 {
     RenderNode pass_node{};
     Context* ctx{};
@@ -37,10 +37,10 @@ struct RenderPass
     std::vector<std::pair<int,Mat44>> meshes;
     std::vector<TrianglePrimitive*> primitives;
     BVHTree* bvh_tree{};
-    TrianglePrimitive* tri_pool;
+    TrianglePrimitive* tri_pool{};
     bool try_add_render_node(RenderNode& node);
 
-    ~RenderPass();
+    ~DrawCall();
 
     void assign_triangle_primitives(int size);
 
@@ -82,6 +82,6 @@ class RenderManager : public ObjectManger<RenderComponent>
 public:
     void collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes);
 
-    void calculate_render_pass(Camera* camera, std::vector<RenderPass>& render_passes);
+    void calculate_render_pass(Camera* camera, std::vector<DrawCall>& render_passes);
 };
 #endif //MESHRENDER_H

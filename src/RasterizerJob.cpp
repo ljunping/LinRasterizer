@@ -87,8 +87,13 @@ void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* glo
         {
             frame_buff[idx] = background_color;
         }
-        pass_node.camera->depth_buff[idx + ctx->msaa_index * w * h] = 1.f;
-        pass_node.camera->fragment_map[idx + ctx->msaa_index * w * h].triangle = nullptr;
+        for (int i = 0; i < ctx->msaa_factor; ++i)
+        {
+            pass_node.camera->depth_buff[idx + i * w * h] = 1.f;
+            pass_node.camera->fragment_map[idx + i * w * h].triangle = nullptr;
+            pass_node.camera->fragment_map[idx + i * w * h].draw_call = nullptr;
+
+        }
     }
 }
 
@@ -99,22 +104,31 @@ void clear_complete(std::size_t data_begin,std::size_t data_end, void* global_da
 
 void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    auto ctx = get_current_ctx();
-    int w, h;
-    ctx->get_screen_size(w, h);
+
     FragShader* frag_shader = (FragShader*)global_data;
+    auto ctx = frag_shader->draw_call->ctx;
+    auto draw_call = frag_shader->draw_call;
+    int w, h;
+    frag_shader->draw_call->ctx->get_screen_size(w, h);
     Color* frame_buff = frag_shader->frame_buff;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
+        auto& _fragment = (*frag_shader->fragment_map)[idx];
+        if (_fragment.draw_call != draw_call)
+        {
+            continue;
+        }
         Vec4 frag_color;
         Vec4 sample_frag_color;
         int i = idx / w, j = idx % w;
         Vec4 dts_color = v_color4(frame_buff[(h - i - 1) * w + j]);
+
         int sample_count = 0;
         bool is_run_frag = false;
         for (int f = 0; f < ctx->msaa_factor; ++f)
         {
             auto& fragment = (*frag_shader->fragment_map)[idx + f * w * h];
+
             auto tri = fragment.triangle;
             if (tri)
             {
@@ -157,6 +171,11 @@ void prepare_frag_shader_execute(std::size_t data_begin,std::size_t data_end, vo
     auto& pass_node = current_render_pass->pass_node;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
+        auto fragment = &pass_node.camera->fragment_map[idx];
+        if (fragment->draw_call != current_render_pass)
+        {
+            continue;
+        }
         for (int i = 0; i < context->msaa_factor; ++i)
         {
             auto fragment = &pass_node.camera->fragment_map[idx + i * w * h];
@@ -166,8 +185,8 @@ void prepare_frag_shader_execute(std::size_t data_begin,std::size_t data_end, vo
             tri->vert[0].attributes->create_vert_attribute(tri->vert[0], tri->vert[1], tri->vert[2],
                                                            fragment->alpha,
                                                            fragment->vertex_attribute);
+            break;
         }
-
     }
 }
 
@@ -212,7 +231,7 @@ void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* glob
 void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     static std::mutex mutex;
-    auto* data = (std::tuple<RenderPass*,Mat44>*)global_data;
+    auto* data = (std::tuple<DrawCall*,Mat44>*)global_data;
     Mat44& mvp = std::get<1>(*data);
     auto render_pass = std::get<0>(*data);
     auto get_model_tri = [render_pass](int index, TrianglePrimitive& tri)
@@ -223,6 +242,7 @@ void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
             if (index < mesh.tri_count())
             {
                 mesh.generate_triangle(tri, index);
+                break;
             }
             index -= mesh.tri_count();
         }
@@ -244,6 +264,99 @@ void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
         //     break_huge_triangle(triangle_primitives[i], HUGE_TRIANGLE_THR, result, break_count);
         //     triangle_primitives.insert(triangle_primitives.end(), result.begin(), result.end());
         // }
+    }
+}
+
+Mesh* generate_sphere(float radius, int stacks, int slices)
+{
+    float* vert_buff = new float[5 * (stacks + 1) * (slices + 1)];
+
+    // Generate vertices
+    for (int stack = 0; stack < stacks; ++stack)
+    {
+        float phi = M_PI * stack / stacks; // Latitude angle (0 to π)
+        for (int slice = 0; slice <= slices; ++slice)
+        {
+            float theta = 2 * M_PI * slice / slices; // Longitude angle (0 to 2π)
+            float x = radius * sin(phi) * cos(theta);
+            float y = radius * sin(phi) * sin(theta);
+            float z = radius * cos(phi);
+            vert_buff[5 * (stack * (slices + 1) + slice)] =x;
+            vert_buff[5 * (stack * (slices + 1) + slice) + 1] = y;
+            vert_buff[5 * (stack * (slices + 1) + slice) + 2] = z;
+            vert_buff[5 * (stack * (slices + 1) + slice) + 3] = stack*1.0f / stacks;
+            vert_buff[5 * (stack * (slices + 1) + slice) + 4] = slice * 1.0f / slices;
+
+        }
+    }
+    SHARE_PTR<float[]> share_vert_buff(vert_buff);
+    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 5 * (stacks + 1) * (slices + 1));
+    _Attributes->bind_attribute(POS,3, 0, 5);
+    _Attributes->bind_attribute(UV,2, 3, 5);
+    std::vector<int> eb0;
+    // Generate triangles
+    for (int stack = 0; stack < stacks; ++stack)
+    {
+        for (int slice = 0; slice < slices; ++slice)
+        {
+            // Compute indices for the four vertices of the current quad
+            int i1 = stack * (slices + 1) + slice; // Top-left
+            int i2 = i1 + 1; // Top-right
+            int i3 = i1 + (slices + 1); // Bottom-left
+            int i4 = i3 + 1; // Bottom-right
+            // Two triangles per quad
+            if (stack != 0)
+            {
+                eb0.emplace_back(i1);
+                eb0.emplace_back(i3);
+                eb0.emplace_back(i2);
+            }
+            if (stack != stacks- 1)
+            {
+                eb0.emplace_back(i3);
+                eb0.emplace_back(i4);
+                eb0.emplace_back(i2);
+            }
+        }
+    }
+    _Attributes->ebo = std::move(eb0);
+    return _Attributes;
+}
+
+
+
+Mesh* generate_quad()
+{
+    float* vert_buff = new float[4 * 5]
+    {
+        -0.5, -0.5, 0, 0, 0,
+        0.5, -0.5, 0, 1, 0,
+        -0.5, 0.5, 0, 0, 1,
+        0.5, 0.5, 0, 1, 1,
+    };
+
+    SHARE_PTR<float[]> share_vert_buff(vert_buff);
+    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 4*5);
+    _Attributes->bind_attribute(POS,3, 0, 5);
+    _Attributes->bind_attribute(UV, 2, 3, 5);
+    _Attributes->ebo = {0, 1, 2, 1, 3, 2};
+    return _Attributes;
+}
+
+void draw_line(Context* ctx, Color* buff, void* data)
+{
+    int w, h;
+    ctx->get_screen_size(w, h);
+    auto line = (DrawLineInfo*)data;
+    auto bresenham_line = BresenhamLine(line->x0, line->y0, line->x1, line->y1);
+    int x, y, mx, my;
+    x = line->x0;
+    y = line->y0;
+    buff[y * w + x] = line->color;
+    while (bresenham_line.has_next())
+    {
+        bresenham_line.next_point(x, y, mx, my);
+        buff[y * w + x] = line->color;
     }
 }
 
@@ -317,19 +430,16 @@ bool add_fragment(TrianglePrimitive& tri, Context* ctx,L_MATH::Vec<float, 3>& al
     fragment.frag_coord = Vec3{(float)j, (float)i, real_z};
     fragment.alpha = alpha;
     fragment.resolution[0] = w;
-    fragment.pass = current_render_pass;
+    fragment.draw_call = current_render_pass;
     fragment.resolution[1] = h;
     return true;
 }
 
 bool ray_caster(Context* ctx, float si, float sj, RayCasterResult* result)
 {
-    // TIME_RUN_BEGIN()
-
     auto current_render_pass = ctx->current_render_pass();
-    auto& pass_node = current_render_pass->pass_node;
     Vec3 sv = Vec3({si, sj, -1});
-    float min_z = -pass_node.camera->far;
+    float min_z = 1;
     bool _is_ray_caster = false;
     auto& proj_triangle_list = current_render_pass->primitives;
     L_MATH::Vec<float, 3> alpha;
@@ -351,15 +461,16 @@ bool ray_caster(Context* ctx, float si, float sj, RayCasterResult* result)
         triangle.barycentric(sv, alpha);
         if (triangle.is_same_sign(alpha))
         {
-            auto alpha_inv = 1 / L_MATH::dot(alpha, triangle.inv_w);
-            auto z = -1.f * alpha_inv;
-            alpha = alpha * triangle.inv_w * alpha_inv;
-            if (z < -pass_node.camera->near && z > min_z)
+            float stz = (triangle.v[0][2] * alpha[0]
+                + triangle.v[1][2] * alpha[1]
+                + triangle.v[2][2]
+                * alpha[2]);
+
+            if (stz < min_z && stz > -1)
             {
                 result->triangle = &triangle;
                 result->alpha = alpha;
-                result->z = z;
-                min_z = z;
+                min_z = stz;
                 _is_ray_caster = true;
             }
         }
@@ -370,7 +481,7 @@ bool ray_caster(Context* ctx, float si, float sj, RayCasterResult* result)
 bool ray_caster_bvh(Camera* camera,BVHTree* bvh_tree,float si, float sj, RayCasterResult* result)
 {
     Vec3 sv = Vec3({si, sj, -1});
-    float min_z = -camera->far;
+    float min_z = 1;
     bool _is_ray_caster = false;
     std::vector<RayCasterResult> ray_casters;
     if (bvh_tree->intersect_traverse(sv, L_MATH::FORWARD, ray_casters))
@@ -383,15 +494,16 @@ bool ray_caster_bvh(Camera* camera,BVHTree* bvh_tree,float si, float sj, RayCast
                 continue;
             }
             auto alpha = ray_caster.alpha;
-            auto alpha_inv = 1 / L_MATH::dot(alpha, triangle.inv_w);
-            auto z = -alpha_inv;
-            alpha = alpha * triangle.inv_w * alpha_inv;
-            if (z > min_z && z < -camera->near)
+            float stz = (triangle.v[0][2] * alpha[0]
+                + triangle.v[1][2] * alpha[1]
+                + triangle.v[2][2]
+                * alpha[2]);
+
+            if (stz < min_z && stz > -1)
             {
                 result->triangle = &triangle;
                 result->alpha = alpha;
-                result->z = z;
-                min_z = result->z;
+                min_z = stz;
                 _is_ray_caster = true;
             }
         }
@@ -402,7 +514,6 @@ bool ray_caster_bvh(Camera* camera,BVHTree* bvh_tree,float si, float sj, RayCast
 bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* bvh_tree, float si, float sj, RayCasterResult* result)
 {
     Vec3 sv = Vec3({si, sj, -1});
-    float min_z = -camera->far;
     bool _is_ray_caster = false;
     auto box_distance = [](Box<3>& box)
     {
@@ -428,19 +539,7 @@ bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* bvh_tree, float si, float 
 
     if (bvh_tree->intersect_compare_distance(sv, L_MATH::FORWARD, result, box_distance, tri_distance))
     {
-        auto& triangle = *result->triangle;
-        auto alpha = result->alpha;
-        auto alpha_inv = 1 / L_MATH::dot(alpha, triangle.inv_w);
-        auto z = -alpha_inv;
-        alpha = alpha * triangle.inv_w * alpha_inv;
-        if (z > min_z && z < -camera->near)
-        {
-            result->triangle = &triangle;
-            result->alpha = alpha;
-            result->z = z;
-            min_z = result->z;
-            _is_ray_caster = true;
-        }
+        _is_ray_caster = true;
     }
     return _is_ray_caster;
 }
@@ -667,10 +766,7 @@ void break_huge_triangle(TrianglePrimitive& tri, float area_thr, std::vector<Tri
             tri_result->v[1] = tri.v[0] * alpha1[0] + tri.v[1] * alpha1[1] + tri.v[2] * alpha1[2];
             tri_result->v[2] = tri.v[0] * alpha2[0] + tri.v[1] * alpha2[1] + tri.v[2] * alpha2[2];
             tri_result->inv_w = Vec3::ONE;
-#if DEBUG
             tri_result->id = tri.id;
-#endif
-
             auto attributes = tri.vert[0].attributes;
 
             attributes->create_vert_attribute(tri.vert[0], tri.vert[1], tri.vert[2], alpha0, tri_result->vert[0]);

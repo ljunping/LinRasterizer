@@ -247,7 +247,7 @@ bool BVHTree::intersect_compare_distance(const L_MATH::Vec<float, 3>& origin, co
     {
         queue.emplace(box_distance(root->aabb), root);
     }
-    float maxDistance = -std::numeric_limits<float>::infinity();
+    float maxDistance = -INFINITY;
     bool find = false;
     while (!queue.empty())
     {

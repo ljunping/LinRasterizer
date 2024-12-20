@@ -5,16 +5,7 @@
 #ifndef MATERIAL_H
 #define MATERIAL_H
 
-#define DEFINE_UNIFORM(FORM_TYPE)\
-    private:std::unordered_map<int, FORM_TYPE> FORM_TYPE##_uniform;\
-    public:FORM_TYPE get_##FORM_TYPE##_uniform(int uniform_name)\
-    {\
-        return FORM_TYPE##_uniform[uniform_name];\
-    }\
-    public:void set_##FORM_TYPE##_uniform(int uniform_name,FORM_TYPE value)\
-    {\
-        FORM_TYPE##_uniform[uniform_name] = value;\
-    }
+
 
 #include "L_math.h"
 #include "Color.h"
@@ -29,6 +20,12 @@
 #define MATERIAL_LIGHT_NS 104
 #define MATERIAL_LIGHT_NI 105
 #define MATERIAL_LIGHT_D 106
+
+#define COLOR1 201
+#define COLOR2 202
+#define COLOR3 203
+
+
 
 class FragShader;
 

@@ -12,7 +12,9 @@ void Transform::on_create()
     local_scale = Vec3::ONE;
     local_pos = Vec3::ZERO;
     parent = nullptr;
-    get_current_ctx()->transform_manager->on_create_obj(this);
+    auto ctx = get_current_ctx();
+    ctx->transform_manager->on_create_obj(this);
+
 }
 
 void Transform::on_delete()
@@ -64,14 +66,31 @@ void Transform::set_local_to_parent_mat(const L_MATH::Mat<float, 4, 4>& mat)
 
 void Transform::add_child(Transform* node)
 {
+    if (node==nullptr)
+    {
+        return;
+    }
+    if (node->parent==this)
+    {
+        return;
+    }
+    if (node->parent != nullptr)
+    {
+        node->parent->remove_child(node);
+    }
     children.push_back(node);
     node->parent = this;
 }
 
 void Transform::remove_child(Transform* node)
 {
+    if (node->parent!=this)
+    {
+        return;
+    }
     auto transform = std::find(children.begin(), children.end(), node);
     children.erase(transform);
+    node->parent = nullptr;
 }
 
 Transform* Transform::get_child(int index) const
@@ -86,7 +105,18 @@ int Transform::child_count() const
 
 void Transform::set_parent(Transform* node)
 {
-    this->parent = node;
+    if (node==this->parent)
+    {
+        return;
+    }
+    if (this->parent != nullptr)
+    {
+        this->parent->remove_child(this);
+    }
+    if (node!=nullptr)
+    {
+        node->add_child(this);
+    }
 }
 
 L_MATH::Vec<float, 3> Transform::get_global_pos()

@@ -56,7 +56,7 @@ void Camera::generate_primitive(Context* ctx)
     update_projection_mat();
     auto pass = ctx->current_render_pass();
     std::vector<std::pair<int,Mat44>>& meshes = pass->meshes;
-    std::vector<std::tuple<RenderPass*,Mat44>> data(meshes.size());
+    std::vector<std::tuple<DrawCall*,Mat44>> data(meshes.size());
 
     int pri_size = 0;
     for (int i = 0; i < meshes.size(); ++i)

@@ -4,15 +4,54 @@
 #include "FragShader.h"
 #include "Material.h"
 #include "MeshRender.h"
+#include "RasterizerJob.h"
 #include "Transform.h"
 #include "Texture.h"
 using namespace L_MATH;
-static int layer;
+static int layer = 1;
 int next_layer()
 {
     return 1 << (layer++);
 }
-Transform* simple_tri()
+Transform* sphere()
+{
+    //mesh
+    auto sphere = generate_sphere(0.5, 100, 100);
+    auto parent = CREATE_OBJECT_BY_TYPE(Transform);
+    auto texture = Resource::get_or_create_resource<Texture>("black_white_box.png", "black_white_box.png", true);
+    auto frag_shader = Resource::get_or_create_resource<FragShader>("TextureFragShader_Sphere.frag");
+    frag_shader->set_Color_uniform(COLOR1, GREEN);
+    auto material = Resource::get_or_create_resource<Material>("default_material");
+    auto meshrender = parent->add_component<MeshRender>();
+    meshrender->frag_shader = frag_shader->get_resource_id();
+    meshrender->frame_buff_index = 0;
+    meshrender->mesh = sphere->get_resource_id();
+    meshrender->sort_layer = 1;
+    meshrender->material = material->get_resource_id();
+    meshrender->texture = texture->get_resource_id();
+    return parent;
+}
+
+Transform* quad()
+{
+    //mesh
+    auto quad = generate_quad();
+    auto parent = CREATE_OBJECT_BY_TYPE(Transform);
+    auto texture = Resource::get_or_create_resource<Texture>("black_white_box.png", "black_white_box.png", true);
+    auto frag_shader = Resource::get_or_create_resource<FragShader>("TextureFragShader_quad.frag");
+    frag_shader->set_Color_uniform(COLOR1, RED);
+    auto material = Resource::get_or_create_resource<Material>("default_material");
+    auto meshrender = parent->add_component<MeshRender>();
+    meshrender->frag_shader = frag_shader->get_resource_id();
+    meshrender->frame_buff_index = 0;
+    meshrender->mesh = quad->get_resource_id();
+    meshrender->sort_layer = 1;
+    meshrender->material = material->get_resource_id();
+    meshrender->texture = texture->get_resource_id();
+    return parent;
+}
+
+Transform* vert_buff()
 {
     //mesh
     float z = -200;
@@ -36,7 +75,7 @@ Transform* simple_tri()
     parent->local_scale = Vec3{1, 1, 1};
     parent->local_euler_angles = Vec3{50, 0, 0};
     auto texture = Resource::get_or_create_resource<Texture>("black_white_box.png", "black_white_box.png", true);
-    auto frag_shader = Resource::get_or_create_resource<FragShader>("FragShader.frag");
+    auto frag_shader = Resource::get_or_create_resource<TextureFragShader>("TextureFragShader.frag");
     auto material = Resource::get_or_create_resource<Material>("default_material");
     auto meshrender = parent->add_component<MeshRender>();
     meshrender->frag_shader = frag_shader->get_resource_id();
@@ -84,12 +123,22 @@ int main()
     auto* window_handle = new WindowHandle(0, 0, 640, 480);
     window_handle->open();
     auto ctx = get_current_ctx();
-    ctx->enable_ray_cast = true;
-    ctx->build_bvh = true;
-    ctx->msaa_factor = 2;
+    ctx->enable_ray_cast = false;
+    ctx->build_bvh = false;
+    ctx->msaa_factor = 1;
     ctx->enable_edge = true;
-    ctx->root->add_child(create_obj_model_node("pig/16433_Pig.obj"));
-    // ctx->root->add_child(simple_tri());
+    ctx->background_color = BLACK;
+    auto camera_node = CREATE_OBJECT_BY_TYPE(Transform);
+    auto camera = camera_node->add_component<Camera>(0.1f, 1000.0f, 120, 640 * 1.0 / 480, true);
+    camera->render_layer = 1;
+    create_obj_model_node("pig/16433_Pig.obj");
+    // vert_buff();
+    // auto sphere_node = sphere();
+    // sphere_node->local_pos = {0, 1, -1};
+    // auto quad_node = quad();
+    // quad_node->local_euler_angles = {-70, 0, 0};
+    // quad_node->local_pos = Vec3{0, 0.1, -1.5};
+    // quad_node->local_scale *= 2.5;
     ctx->main_loop();
     return 0;
 }

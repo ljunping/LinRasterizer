@@ -7,6 +7,7 @@
 #include "Color.h"
 #include <vector>
 
+class Mesh;
 class BVHTree;
 class VertexAttribute;
 struct RayCasterResult;
@@ -63,6 +64,16 @@ void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* glob
 
 void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data);
 
+Mesh* generate_sphere(float radius, int stacks, int slices);
 
+Mesh* generate_quad();
+
+struct DrawLineInfo
+{
+    int x0, y0, x1, y1;
+    Color color;
+};
+
+void draw_line(Context* ctx, Color* buff, void* data);
 
 #endif //RASTERIZERJOB_H

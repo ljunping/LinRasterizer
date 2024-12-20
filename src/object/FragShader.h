@@ -10,10 +10,11 @@
 #include "Material.h"
 #include "Texture.h"
 #include "Resource.h"
+#include "CommonMacro.h"
 
 
 class Context;
-struct RenderPass;
+struct DrawCall;
 class Material;
 
 struct Fragment
@@ -22,26 +23,31 @@ struct Fragment
     Vec3 alpha;
     Vec3 frag_coord;
     Vec2 resolution;
-    RenderPass* pass;
+    DrawCall* draw_call;
     VertexAttribute vertex_attribute;
 };
-struct DrawCall
-{
 
-
-};
 
 class FragShader : public Resource
 {
     INIT_TYPE(FragShader,Resource)
+
 public:
-    std::vector<Fragment>* fragment_map;
-    int width, height;
+    DEFINE_UNIFORM(float)
+    DEFINE_UNIFORM(int)
+    DEFINE_UNIFORM(Color)
+    DEFINE_UNIFORM(Vec3)
+    DEFINE_UNIFORM(Vec2)
+    DEFINE_UNIFORM(Mat44)
+    DEFINE_UNIFORM(Mat33)
+    std::vector<Fragment>* fragment_map{};
+    int width{}, height{};
     Material* material = nullptr;
     Texture* texture = nullptr;
     Color* frame_buff = nullptr;
-    void begin_render_pass(Context* ctx,RenderPass* pass);
-    void end_render_pass(Context* ctx,RenderPass* pass);
+    DrawCall* draw_call;
+    void begin_render_pass(Context* ctx,DrawCall* pass);
+    void end_render_pass(Context* ctx,DrawCall* pass);
     virtual Vec4 run(int frag_index);
     ~FragShader() override = default;
     template <int N>

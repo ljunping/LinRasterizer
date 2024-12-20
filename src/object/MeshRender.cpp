@@ -27,7 +27,7 @@ bool equal_compare_render_node(const RenderNode& a, const RenderNode& b)
         && a.frag_shader == b.frag_shader;
 }
 
-bool RenderPass::try_add_render_node(RenderNode& node)
+bool DrawCall::try_add_render_node(RenderNode& node)
 {
     if (!is_init)
     {
@@ -42,13 +42,13 @@ bool RenderPass::try_add_render_node(RenderNode& node)
     return true;
 }
 
-RenderPass::~RenderPass()
+DrawCall::~DrawCall()
 {
     free(this->tri_pool);
     delete bvh_tree;
 }
 
-void RenderPass::assign_triangle_primitives(int size)
+void DrawCall::assign_triangle_primitives(int size)
 {
     if (primitives.size() != size)
     {
@@ -58,7 +58,7 @@ void RenderPass::assign_triangle_primitives(int size)
     }
 }
 
-void RenderPass::build_bvh_tree()
+void DrawCall::build_bvh_tree()
 {
     this->bvh_tree = new BVHTree();
     this->bvh_tree->build(this->primitives);
@@ -104,7 +104,7 @@ void RenderManager::collection_render_node(Camera* camera, std::vector<RenderNod
     }
 }
 
-void RenderManager::calculate_render_pass(Camera* camera, std::vector<RenderPass>& render_passes)
+void RenderManager::calculate_render_pass(Camera* camera, std::vector<DrawCall>& render_passes)
 {
     std::vector<RenderNode> render_nodes;
     collection_render_node(camera, render_nodes);

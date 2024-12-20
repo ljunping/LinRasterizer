@@ -16,8 +16,6 @@ Context* current_context;
 
 Context::Context(WindowHandle* handle): window_handle(handle), transform_manager(nullptr), render_manager(nullptr),
                     component_update_manager(nullptr),
-                    root(nullptr),
-                    scene_node_count(0),
                     cur_frame_buffer_id(0),
                     build_bvh(false),
                     enable_ray_cast(false)
@@ -30,13 +28,13 @@ void Context::init()
     transform_manager = new TransformManager();
     render_manager = new RenderManager();
     component_update_manager = new ComponentUpdateManager();
-    root = CREATE_OBJECT_BY_TYPE(Transform);
 }
 
 
 
-RenderPass* Context::current_render_pass()
+DrawCall* Context::current_render_pass()
 {
+    RUNTIME_ASSERT(render_pass_index<render_passes.size(),"fatal error,render_pass_index>=render_passes.size(),");
     return &render_passes[render_pass_index];
 }
 
@@ -88,34 +86,39 @@ void Context::render()
     for (auto camera : cameras)
     {
         render_passes.clear();
+        this->render_pass_index = 0;
+        this->msaa_index = 0;
         this->render_manager->calculate_render_pass(camera, render_passes);
         if (render_passes.empty())
         {
             continue;
         }
-        this->render_pass_index = 0;
         camera->draw_begin(this);
+        camera->clear(this);
         for (int i = 0; i < render_passes.size(); ++i)
         {
             this->render_pass_index = i;
+            this->render_passes[i].ctx = this;
             camera->generate_primitive(this);
             for (int j = 0; j < this->msaa_factor; ++j)
             {
                 this->msaa_index = j;
-                camera->clear(this);
                 if (!this->enable_ray_cast)
                 {
                     camera->raster_scene(this);
-                }else
+                }
+                else
                 {
                     camera->ray_cast_scene(this);
                 }
                 camera->wait_finish();
             }
+            camera->render_fragment(this);
+            camera->wait_finish();
         }
-        camera->render_fragment(this);
         camera->draw_end(this);
     }
+    render_after_scene(this->get_frame_buffer(0));
     this->window_handle->draw_frame_buff();
 
 }

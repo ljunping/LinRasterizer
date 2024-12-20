@@ -9,4 +9,14 @@
 #define UNIQUE_PTR std::unique_ptr
 #define WEAK_PTR std::weak_ptr
 
+#define DEFINE_UNIFORM(FORM_TYPE)\
+    private:std::unordered_map<int, FORM_TYPE> FORM_TYPE##_uniform;\
+    public:FORM_TYPE get_##FORM_TYPE##_uniform(int uniform_name)\
+    {\
+        return FORM_TYPE##_uniform[uniform_name];\
+    }\
+    public:void set_##FORM_TYPE##_uniform(int uniform_name,FORM_TYPE value)\
+    {\
+        FORM_TYPE##_uniform[uniform_name] = value;\
+    }
 #endif //COMMONMACRO_H
