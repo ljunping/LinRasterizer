@@ -140,6 +140,15 @@ Mesh::Mesh(const char* obj_file_name)
         break;
 
     }
+    auto mesh_centroid = this->get_mesh_centroid();
+    auto offset = data_formats[POS].offset;
+    for (int i = 0; i < vert_count; ++i)
+    {
+        (vbo.get() + i * vert_data_length)[offset] -= mesh_centroid[0];
+        (vbo.get() + i * vert_data_length)[offset + 1] -= mesh_centroid[1];
+        (vbo.get() + i * vert_data_length)[offset+2] -= mesh_centroid[2];
+    }
+    this->centroid = Vec3::ZERO;
 }
 
 void Mesh::on_create()
@@ -199,6 +208,7 @@ void Mesh::generate_triangle(TrianglePrimitive& tri, int tri_index) const
         return;
     }
     generate_triangle(ebo[tri_index * 3], ebo[tri_index * 3 + 1], ebo[tri_index * 3 + 2], tri);
+    tri.id = tri_index;
 }
 
 int Mesh::tri_count() const
@@ -236,6 +246,42 @@ void Mesh::generate_triangles(const std::vector<int>& ebo, std::vector<TriangleP
 float* Mesh::operator[](int vert_index) const
 {
     return vbo.get() + vert_index * vert_data_length;
+}
+
+L_MATH::Vec<float, 3> Mesh::get_mesh_centroid()
+{
+    if (is_centroid)
+    {
+        return centroid;
+    }
+    is_centroid = true;
+    Vec3 pos;
+    for (int i = 0; i < vert_count; ++i)
+    {
+        this->get_attribute_value(i, POS, pos);
+        centroid += pos;
+    }
+    centroid /= vert_count;
+    return centroid;
+}
+
+Box<3> Mesh::get_box()
+{
+    if (is_generate_box)
+    {
+        return this->box;
+    }
+    std::vector<TrianglePrimitive> primitives;
+    this->generate_triangles(primitives);
+    Box<3> box;
+    for (auto primitive : primitives)
+    {
+        primitive.update_param();
+        box.expand(primitive.box);
+    }
+    this->box = box;
+    this->is_generate_box = true;
+    return box;
 }
 
 

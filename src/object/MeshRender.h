@@ -12,6 +12,7 @@ class Context;
 
 struct RenderNode
 {
+    bool transparent{};
     int render_order{};
     int mesh{};
     Mat44 model_matrix;
@@ -22,42 +23,57 @@ struct RenderNode
     int frag_shader;
 };
 
-inline bool is_same_camera_render(int sort_layer1,int sort_layer2);
-
 
 inline bool less_compare_render_node(const RenderNode& a, const RenderNode& b);
 
 inline bool equal_compare_render_node(const RenderNode& a, const RenderNode& b);
 
-struct DrawCall
+struct DrawCallData
 {
     RenderNode pass_node{};
     Context* ctx{};
     bool is_init = false;
     std::vector<std::pair<int,Mat44>> meshes;
     std::vector<TrianglePrimitive*> primitives;
+    Material* material0{};
+    Texture* texture0{};
+    FragShader* frag_shader0{};
+    Color* frame_buff{};
     BVHTree* bvh_tree{};
     TrianglePrimitive* tri_pool{};
     bool try_add_render_node(RenderNode& node);
-
-    ~DrawCall();
-
+    void init(const RenderNode& node);
+    ~DrawCallData();
     void assign_triangle_primitives(int size);
-
     void build_bvh_tree();
+    void draw_call_begin();
+    void draw_call_end();
+    void get_model_matrix(const Mesh* mesh,Mat44& m) const;
+    void get_view_matrix(Mat44& m) const;
+    void get_proj_matrix(Mat44& m) const;
 };
+
 
 class RenderComponent : public Component
 {
     INIT_TYPE(RenderComponent, Component)
-
 public:
+    bool transparent{};
     int render_order = 0;
-    int sort_layer = 1;
+    int render_layer = 1;
     void on_create() override;
     void on_delete() override;
 
     virtual void collect_render_node(Camera* camera, std::vector<RenderNode>& render_nodes){};
+};
+
+
+class MeshProvider : public Component
+{
+    INIT_TYPE(MeshProvider, Component)
+public:
+    int mesh_id{};
+    void locate_centroid(Camera* camera) const;
 };
 
 class MeshRender : public RenderComponent
@@ -66,10 +82,9 @@ class MeshRender : public RenderComponent
 public:
     int frame_buff_index = 0;
     const bool NEED_UPDATE{true};
-    int mesh{};
-    int texture;
-    int material;
-    int frag_shader;
+    int texture{};
+    int material{};
+    int frag_shader{};
     //如果需要多纹理材质支持则
     // int texture1;
     // int material1;
@@ -80,8 +95,8 @@ public:
 class RenderManager : public ObjectManger<RenderComponent>
 {
 public:
-    void collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes);
+    void collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes,bool transparent);
 
-    void calculate_render_pass(Camera* camera, std::vector<DrawCall>& render_passes);
+    void calculate_render_pass(Camera* camera, std::vector<DrawCallData>& render_passes, bool transparent);
 };
 #endif //MESHRENDER_H

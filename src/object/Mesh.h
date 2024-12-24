@@ -5,6 +5,7 @@
 #ifndef ATTRIBUTE_H
 #define ATTRIBUTE_H
 #pragma once
+#include "Box.h"
 #include "CommonMacro.h"
 #include "L_math.h"
 #include "Object.h"
@@ -34,7 +35,6 @@ struct  VertexAttribute
     const Mesh* attributes;
     float values[AttributeTypeCount * 4];
     int v[3];
-    int data_count = 0;
     Vec3 alpha;
     template<int N>
     void get_attribute_value(int attribute_index, L_MATH::Vec<float, N>& result);
@@ -48,6 +48,10 @@ class Mesh : public Resource
     INIT_TYPE(Mesh, Resource)
     Mesh(SHARE_PTR<float[]>& vbo, int count);
     explicit Mesh(const char* obj_file_name);
+    Vec3 centroid;
+    Box<3> box;
+    bool is_centroid = false;
+    bool is_generate_box = false;
 public:
     int id = 0;
     void on_create() override;
@@ -71,6 +75,8 @@ public:
     float* operator[](int vert_index) const;
     template <int N>
     void get_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<float, N>& result) const;
+    Vec3 get_mesh_centroid();
+    Box<3> get_box();
 };
 
 

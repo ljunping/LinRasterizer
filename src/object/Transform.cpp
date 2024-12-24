@@ -48,13 +48,16 @@ L_MATH::Mat<float, 4, 4> Transform::get_local_to_parent_mat() const
     return L_MATH::compose_trs(local_pos, local_euler_angles, local_scale);
 }
 
-void Transform::set_local_to_global_mat(const L_MATH::Mat<float, 4, 4>& mat)
+void Transform::set_local_to_global_mat(const L_MATH::Mat<float, 4, 4>& rts)
 {
-    auto local_to_parent_mat = get_local_to_parent_mat();
+    if (this->parent==nullptr)
+    {
+        set_local_to_parent_mat(rts);
+    }
+    auto to_global_mat = this->parent->get_local_to_global_mat();
     Mat44 inv_local_to_parent_mat;
-    auto local_to_global_mat = get_local_to_global_mat();
-    L_MATH::invert_trs_mat(local_to_global_mat, inv_local_to_parent_mat);
-    set_local_to_parent_mat(local_to_parent_mat * inv_local_to_parent_mat * mat);
+    L_MATH::invert_trs_mat(to_global_mat, inv_local_to_parent_mat);
+    set_local_to_parent_mat(inv_local_to_parent_mat * rts);
 }
 
 

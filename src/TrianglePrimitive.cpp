@@ -6,80 +6,87 @@
 #include "Camera.h"
 #include "debug.h"
 
+
 inline void Sutherland_Hodgman(std::vector<Vec3>& clip_plane_normal,
-                                   std::vector<float>& clip_plane_c,
-                                   std::vector<Vec3>& ccw_points, std::vector<std::vector<float>>* result)
+                               std::vector<float>& clip_plane_c,
+                               std::vector<Vec3>& ccw_points, std::vector<std::vector<float>>* result)
+{
+    int clip_size = ccw_points.size();
+    std::vector<std::vector<float>>* ccw_points_temps[2];
+    std::vector<std::vector<float>> ccw_points_temp_3;
+    ccw_points_temps[(clip_plane_normal.size() & 1) ^ 1] = &ccw_points_temp_3;
+    ccw_points_temps[clip_plane_normal.size() & 1] = result;
+    int temp_index = 0;
+    for (int i = 0; i < ccw_points.size(); i++)
     {
-        std::vector<std::vector<float>>* ccw_points_temps[2];
-        std::vector<std::vector<float>> ccw_points_temp_3;
-        ccw_points_temps[(clip_plane_normal.size() & 1) ^ 1] = &ccw_points_temp_3;
-        ccw_points_temps[clip_plane_normal.size() & 1] = result;
-        int temp_index = 0;
+        std::vector<float> temp_c(ccw_points.size(), 0);
+        temp_c[i] = 1;
+        ccw_points_temps[temp_index]->emplace_back(std::move(temp_c));
+    }
+
+    auto get_pos = [&ccw_points](std::vector<float>& alpha)
+    {
+        Vec3 pos;
         for (int i = 0; i < ccw_points.size(); i++)
         {
-            std::vector<float> temp_c(ccw_points.size(), 0);
-            temp_c[i] = 1;
-            ccw_points_temps[temp_index]->emplace_back(std::move(temp_c));
+            pos += ccw_points[i] * alpha[i];
         }
+        return pos;
+    };
 
-        auto get_pos = [&ccw_points](std::vector<float>& alpha)
+    auto calculate_alpha = [](std::vector<float>& alpha_l, std::vector<float>& alpha_r, float t,
+                              std::vector<float>& result)
+    {
+        float last = 0;
+        for (int i = 0; i < alpha_l.size() - 1; ++i)
         {
-            Vec3 pos;
-            for (int i = 0; i < ccw_points.size(); i++)
-            {
-                pos += ccw_points[i] * alpha[i];
-            }
-            return pos;
-        };
-
-        auto calculate_alpha = [](std::vector<float>& alpha_l, std::vector<float>& alpha_r, float t,std::vector<float>& result)
-        {
-            for (int i = 0; i < alpha_l.size(); ++i)
-            {
-                result[i] = alpha_l[i] * (1 - t) + alpha_r[i] * t;
-            }
-        };
-
-        for (int i = 0; i < clip_plane_normal.size(); ++i)
-        {
-            auto& p_normal = clip_plane_normal[i];
-            float c = clip_plane_c[i];
-            auto& ccw_points_temp_1 = *(ccw_points_temps[temp_index]);
-            auto& ccw_points_temp_2 = *(ccw_points_temps[temp_index ^ 1]);
-            ccw_points_temp_2.clear();
-            for (int l = 0; l < ccw_points_temp_1.size(); ++l)
-            {
-                auto& alpha_l = ccw_points_temp_1[l];
-                auto l_p = get_pos(alpha_l);
-                bool l_inside = dot(p_normal, l_p) - c < 0;
-                auto r = (l + 1) % ccw_points_temp_1.size();
-                auto& alpha_r = ccw_points_temp_1[r];
-                auto r_p = get_pos(alpha_r);
-                // 假定平面方程<0是内部
-                bool r_inside = dot(p_normal, r_p) - c < 0;
-                if (!l_inside && !r_inside)
-                {
-                    continue;
-                }
-                if (l_inside)
-                {
-                    ccw_points_temp_2.emplace_back(alpha_l);
-                }
-                if (!l_inside || !r_inside)
-                {
-                    auto dir = r_p - l_p;
-                    auto t = intersect_plane(l_p, dir, p_normal, c);
-                    if (t > 0 && t < 1)
-                    {
-                        std::vector<float> result_l(ccw_points_temp_1.size(), 0);
-                        calculate_alpha(alpha_l, alpha_r, t,result_l);
-                        ccw_points_temp_2.emplace_back(std::move(result_l));
-                    }
-                }
-            }
-            temp_index ^= 1;
+            result[i] = alpha_l[i] * (1 - t) + alpha_r[i] * t;
+            last += result[i];
         }
+        result[alpha_l.size() - 1] = 1 - last;
+    };
+
+    for (int i = 0; i < clip_plane_normal.size(); ++i)
+    {
+        auto& p_normal = clip_plane_normal[i];
+        float c = clip_plane_c[i];
+        auto& ccw_points_temp_1 = *(ccw_points_temps[temp_index]);
+        auto& ccw_points_temp_2 = *(ccw_points_temps[temp_index ^ 1]);
+        ccw_points_temp_2.clear();
+        for (int l = 0; l < ccw_points_temp_1.size(); ++l)
+        {
+            auto& alpha_l = ccw_points_temp_1[l];
+            auto l_p = get_pos(alpha_l);
+            bool l_inside = dot(p_normal, l_p) - c < 0;
+            auto r = (l + 1) % ccw_points_temp_1.size();
+            auto& alpha_r = ccw_points_temp_1[r];
+            auto r_p = get_pos(alpha_r);
+            // 假定平面方程<0是内部
+            bool r_inside = dot(p_normal, r_p) - c < 0;
+            if (!l_inside && !r_inside)
+            {
+                continue;
+            }
+            if (l_inside)
+            {
+                ccw_points_temp_2.emplace_back(alpha_l);
+            }
+            if (!l_inside || !r_inside)
+            {
+                auto dir = r_p - l_p;
+                auto t = intersect_plane(l_p, dir, p_normal, c);
+                if (t > 0 && t < 1)
+                {
+                    std::vector<float> result_l(clip_size, 0);
+                    calculate_alpha(alpha_l, alpha_r, t, result_l);
+                    ccw_points_temp_2.emplace_back(std::move(result_l));
+                }
+            }
+        }
+        temp_index ^= 1;
     }
+}
+
 
 Vec3 TrianglePrimitive::st_box_plane_normal[6] = {
     Vec3{0, 0, 1},
@@ -173,8 +180,6 @@ void TrianglePrimitive::barycentric(const L_MATH::Vec<float, 3>& p,Vec3& alpha) 
     alpha.data[0] = c * inv_cross_dir_z;
     L_MATH::cross_opt_3(v[2] - p, v[0] - v[2], c);
     alpha.data[1] = c * inv_cross_dir_z;
-    // L_MATH::cross_opt_3(v[0] - p, v[1] - v[0], c);
-    // alpha.data[2] = c * inv_cross_dir_z;
     alpha.data[2] = 1 - alpha.data[0] - alpha.data[1];
 }
 
@@ -200,11 +205,13 @@ void TrianglePrimitive::update_param()
     cache_area = cross_dir.sqrt_magnitude() / 2;
     normal_dir = cross_dir.normalize();
     d = normal_dir.dot(v[0]);
+
     if (L_MATH::is_zero(cross_dir[2]) || L_MATH::is_zero(normal_dir[2]))
     {
         discard = true;
         return;
     }
+
     inv_cross_dir_z = 1 / cross_dir[2];
     inv_normal_dir_z = 1 / normal_dir[2];
     clipped = false;

@@ -15,7 +15,7 @@
 
 
 class Context;
-struct DrawCall;
+struct DrawCallData;
 class Material;
 
 struct Fragment
@@ -24,7 +24,7 @@ struct Fragment
     Vec3 alpha;
     Vec3 frag_coord;
     Vec2 resolution;
-    DrawCall* draw_call;
+    DrawCallData* draw_call;
     VertexAttribute vertex_attribute;
 };
 
@@ -38,17 +38,17 @@ public:
     DEFINE_UNIFORM(int)
     DEFINE_UNIFORM(Color)
     DEFINE_UNIFORM(Vec3)
+    DEFINE_UNIFORM(Vec4)
     DEFINE_UNIFORM(Vec2)
     DEFINE_UNIFORM(Mat44)
     DEFINE_UNIFORM(Mat33)
+
     std::vector<Fragment>* fragment_map{};
     int width{}, height{};
-    Material* material = nullptr;
-    Texture* texture = nullptr;
-    Color* frame_buff = nullptr;
-    DrawCall* draw_call;
-    void begin_render_pass(Context* ctx,DrawCall* pass);
-    void end_render_pass(Context* ctx,DrawCall* pass);
+    DrawCallData* draw_call = nullptr;
+    Context* ctx = nullptr;
+    void begin_draw_call(DrawCallData* pass);
+    void end_draw_call(DrawCallData* pass);
     virtual Vec4 run(int frag_index);
     ~FragShader() override = default;
     template <int N>
@@ -68,6 +68,14 @@ public:
     Vec4 run(int frag_index) override;
 }
 ;
+
+class LightFragShader : public TextureFragShader
+{
+    INIT_TYPE(LightFragShader, TextureFragShader)
+public:
+    Vec4 run(int frag_index) override;
+
+};
 template <int N>
 void FragShader::ddx(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result)
 {
@@ -92,6 +100,10 @@ template <int N>
 void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_MATH::Vec<float, N> &result)
 {
     int msaa_index = frag_index_l / (width * height);
+    if (ctx->setting.msaa_factor <= msaa_index)
+    {
+        return;
+    }
     int r_size = (msaa_index + 1) * (width * height);
     int l_size = msaa_index * (width * height);
     auto& fragments = *fragment_map;
@@ -121,9 +133,9 @@ void FragShader::sample_texture(int frag_index, Texture* texture, L_MATH::Vec<fl
     Vec2 uv;
     auto ctx = get_current_ctx();
     auto& fragment = (*fragment_map)[frag_index];
-    if (!ctx->enable_mipmap)
+    if (!ctx->setting.enable_mipmap)
     {
-        const unsigned char*  _res;
+        const unsigned char* _res;
         fragment.vertex_attribute.get_attribute_value(UV, uv);
         texture->texture_raw(uv, _res);
         for (int i = 0; i < N; ++i)

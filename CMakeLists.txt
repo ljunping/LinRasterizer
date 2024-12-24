@@ -71,6 +71,8 @@ add_executable(LinRasterizer src/main.cpp
         src/object/Resource.h
         src/EventSystem.cpp
         src/EventSystem.h
+        src/object/Light.cpp
+        src/object/Light.h
 )
 target_include_directories(LinRasterizer PRIVATE ${X11_INCLUDE_DIR})
 target_include_directories(LinRasterizer PRIVATE ./include)

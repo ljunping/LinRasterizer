@@ -7,6 +7,7 @@
 #include "Transform.h"
 #include "Camera.h"
 #include "FragShader.h"
+#include "Light.h"
 #include "MeshRender.h"
 
 int TypeFactory::type_id = 0;
@@ -27,6 +28,10 @@ DEFINE_TYPE(Camera)
 DEFINE_TYPE(Texture)
 DEFINE_TYPE(Material)
 DEFINE_TYPE(Resource)
+DEFINE_TYPE(MeshProvider)
+DEFINE_TYPE(LightFragShader)
+DEFINE_TYPE(Light)
+
 
 
 
@@ -83,7 +88,9 @@ void TypeFactory::RegisterTypes()
     REGISTER_TYPE(Texture)
     REGISTER_TYPE(Material)
     REGISTER_TYPE(Resource)
-
+    REGISTER_TYPE(MeshProvider)
+    REGISTER_TYPE(LightFragShader)
+    REGISTER_TYPE(Light);
 }
 
 

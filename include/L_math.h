@@ -355,6 +355,7 @@ namespace L_MATH
         }
 
 
+
         Vec(std::initializer_list<T> list)
         {
             if (list.size() != Col) return;
@@ -379,6 +380,7 @@ namespace L_MATH
             }
             data[Col - 1] = t;
         }
+
 
         template <int C>
         explicit Vec(const Vec<T, C>& src)
@@ -752,7 +754,8 @@ namespace L_MATH
     template <typename T, int Col>
     void Vec<T, Col>::normalized()
     {
-        *this /= this->sqrt_magnitude();
+        auto sqrt_magnitude = this->sqrt_magnitude();
+        *this /= sqrt_magnitude;
     }
 
 
@@ -988,6 +991,7 @@ namespace L_MATH
 
     inline void invert_trs_mat(const Mat44& trs_mat,Mat44& M_inv)
     {
+
         Vec3 t, r, s;
         decompose_trs(trs_mat, t, r, s);
         float alpha = r[0];

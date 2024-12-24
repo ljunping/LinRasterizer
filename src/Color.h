@@ -48,6 +48,11 @@ inline Color blend4(const Vec4& src, const Vec4& dst, float alpha)
     return l_color4(src * alpha + dst * (1 - alpha));
 }
 
+inline Vec4 blend4v(const Vec4& src, const Vec4& dst, float alpha)
+{
+    return (src * alpha + dst * (1 - alpha));
+}
+
 inline Color RED = l_color(255, 0, 0);
 inline Color GREEN = l_color(0, 255, 0);
 inline Color BLUE = l_color(0, 0, 255);

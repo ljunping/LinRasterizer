@@ -44,7 +44,7 @@ public:
 #endif
 
 #if DEBUG
-#define RUNTIME_ASSERT(cond, msg) \
+#define RUNTIME_ASSERT(cond, msg,...) \
     do { \
         if (!(cond)) { \
             std::cerr << "Assertion failed: " << msg << "\n"; \
@@ -52,7 +52,11 @@ public:
             std::exit(EXIT_FAILURE); \
         } \
     } while (0)
+#define DEBUG_VAR int ___debug = 0;
 #else
 #define RUNTIME_ASSERT(cond, msg)
+#define DEBUG_VAR
 #endif
 #endif //DEBUG_H
+
+

@@ -18,9 +18,9 @@
 class WindowHandle
 {
 #ifdef WINDOW_X11
-    Display* display;
-    ::Window window;
-    int screen;
+    Display* display{};
+    ::Window window{};
+    int screen{};
 #endif
 #ifdef WINDOW_COCOA
     void* window;
@@ -28,7 +28,7 @@ class WindowHandle
 
 public:
 #ifdef WINDOW_X11
-    XImage* frame_buffs[MAX_FRAME_BUFFERS];
+    XImage* frame_buffs[MAX_FRAME_BUFFERS]{};
     XImage* default_frame_buff{};
 #endif
     int x, y, w, h;
@@ -37,7 +37,7 @@ public:
     ~WindowHandle();
     void event_loop();
     void on_resize(int _w, int _h);
-    void on_key_event(int key);
+    void on_key_event(XEvent& keysym);
     void open();
     void close();
     void resize(int x, int y) const;

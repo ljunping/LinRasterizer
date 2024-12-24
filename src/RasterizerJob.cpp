@@ -48,7 +48,7 @@ void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end,  void* g
         int i = idx / w, j = idx % w;
         float y,x;
         invert_view_transform(w, h, j, i, x, y);
-        if (ctx->build_bvh)
+        if (ctx->setting.build_bvh)
         {
             if (!ray_caster_bvh(current_render_pass->pass_node.camera, current_render_pass->bvh_tree, x, y, &result))
             {
@@ -76,7 +76,7 @@ void clear_context_execute(std::size_t data_begin, std::size_t data_end, void* g
 {
     Context* ctx = (Context*)global_data;
     auto frame_buff = ctx->get_frame_buffer(0);
-    auto background_color = ctx->background_color;
+    auto background_color = ctx->setting.background_color;
     for (int idx = data_begin; idx < data_end; idx++)
     {
         frame_buff[idx] = background_color;
@@ -99,12 +99,11 @@ void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* glo
         {
             frame_buff[idx] = background_color;
         }
-        for (int i = 0; i < ctx->msaa_factor; ++i)
+        for (int i = 0; i < ctx->setting.msaa_factor; ++i)
         {
             pass_node.camera->depth_buff[idx + i * w * h] = 1.f;
             pass_node.camera->fragment_map[idx + i * w * h].triangle = nullptr;
             pass_node.camera->fragment_map[idx + i * w * h].draw_call = nullptr;
-
         }
     }
 }
@@ -122,7 +121,7 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
     auto draw_call = frag_shader->draw_call;
     int w, h;
     frag_shader->draw_call->ctx->get_screen_size(w, h);
-    Color* frame_buff = frag_shader->frame_buff;
+    Color* frame_buff = frag_shader->draw_call->frame_buff;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
         Vec4 frag_color;
@@ -131,7 +130,7 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
         Vec4 dts_color = v_color4(frame_buff[(h - i - 1) * w + j]);
         int sample_count = 0;
         bool is_run_frag = false;
-        for (int f = 0; f < ctx->msaa_factor; ++f)
+        for (int f = 0; f < ctx->setting.msaa_factor; ++f)
         {
             auto& fragment = (*frag_shader->fragment_map)[idx + f * w * h];
             if (fragment.draw_call != draw_call)
@@ -142,7 +141,7 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
             if (tri)
             {
                 sample_count++;
-                if (ctx->enable_edge)
+                if (ctx->setting.enable_edge)
                 {
                     continue;
                 }
@@ -160,16 +159,16 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
         }
         if (sample_count <= 0)
             continue;
-        if (!ctx->enable_edge)
+        if (!ctx->setting.enable_edge)
         {
-            frag_color /= ctx->msaa_factor;
+            frag_color /= ctx->setting.msaa_factor;
             frame_buff[(h - i - 1) * w + j] = blend4(frag_color, dts_color, frag_color[3]);
         }
         else
         {
-            if (sample_count < ctx->msaa_factor)
+            if (sample_count < ctx->setting.msaa_factor)
             {
-                frame_buff[(h - i - 1) * w + j] = ctx->edge_color;
+                frame_buff[(h - i - 1) * w + j] = ctx->setting.edge_color;
             }
         }
     }
@@ -185,7 +184,7 @@ void prepare_frag_shader_execute(std::size_t data_begin,std::size_t data_end, vo
     for (int idx = data_begin; idx < data_end; ++idx)
     {
 
-        for (int i = 0; i < context->msaa_factor; ++i)
+        for (int i = 0; i < context->setting.msaa_factor; ++i)
         {
             auto fragment = &pass_node.camera->fragment_map[idx + i * w * h];
             auto tri = fragment->triangle;
@@ -218,7 +217,7 @@ void rast_tri_execute(std::size_t data_begin,std::size_t data_end, void* global_
         {
             continue;
         }
-        for (int j = 0; j < ctx->msaa_factor; ++j)
+        for (int j = 0; j < ctx->setting.msaa_factor; ++j)
         {
             rast_tri(triangle_primitive, ctx);
         }
@@ -242,8 +241,8 @@ void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* glob
 void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     static std::mutex mutex;
-    auto* data = (std::tuple<DrawCall*,Mat44>*)global_data;
-    Mat44& mvp = std::get<1>(*data);
+    auto* data = (std::tuple<DrawCallData*,Mat44>*)global_data;
+    Mat44 &mvp = std::get<1>(*data);
     auto render_pass = std::get<0>(*data);
     auto get_model_tri = [render_pass](int index, TrianglePrimitive& tri)
     {
@@ -354,6 +353,23 @@ Mesh* generate_quad()
     return _Attributes;
 }
 
+Mesh* generate_tri()
+{
+    float* vert_buff = new float[3 * 5]
+    {
+        -0.5, -0.5, 0, 0, 0,
+        0.5, -0.5, 0, 1, 0,
+        -0.5, 0.5, 0, 0, 1,
+    };
+
+    SHARE_PTR<float[]> share_vert_buff(vert_buff);
+    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 3*5);
+    _Attributes->bind_attribute(POS,3, 0, 5);
+    _Attributes->bind_attribute(UV, 2, 3, 5);
+    _Attributes->ebo = {0, 1, 2};
+    return _Attributes;
+}
+
 void draw_line(Context* ctx, Color* buff, void* data)
 {
     int w, h;
@@ -376,34 +392,43 @@ void complete_mvp_break_huge_triangle(std::size_t data_begin,std::size_t data_en
 
 }
 
-
 void view_transform(int w, int h, float st_x, float st_y, int& i, int& j)
 {
     auto ctx = get_current_ctx();
     Vec2 offset;
-    if(ctx->enable_edge)
+    if (ctx->setting.enable_edge)
     {
-        offset = edge_msaa_template(ctx->msaa_factor, ctx->msaa_index);
-    }else
-    {
-        offset = msaa_template(ctx->msaa_factor, ctx->msaa_index);
+        offset = edge_msaa_template(ctx->setting.msaa_factor, ctx->current_mesa_index());
     }
-    st_x -= offset[0] * 2 / (w - 1);
-    st_y -= offset[1] * 2 / (h - 1);
-    i = static_cast<int>((st_x * (w - 1) / 2) + (w - 1) * 1.0 / 2);
-    j = static_cast<int>((st_y * (h - 1) / 2) + (h - 1) * 1.0 / 2);
+    else
+    {
+        offset = msaa_template(ctx->setting.msaa_factor, ctx->current_mesa_index());
+    }
+
+    float inv_w_minus_1 = 2.0f / (w - 1);
+    float inv_h_minus_1 = 2.0f / (h - 1);
+
+    st_x -= offset[0] * inv_w_minus_1;
+    st_y -= offset[1] * inv_h_minus_1;
+
+    float half_w_minus_1 = (w - 1) / 2.0f;
+    float half_h_minus_1 = (h - 1) / 2.0f;
+
+    i = std::lround(st_x * half_w_minus_1 + half_w_minus_1);
+    j = std::lround(st_y * half_h_minus_1 + half_h_minus_1);
 }
+
 
 void invert_view_transform(int w, int h, int i, int j, float& st_x, float& st_y)
 {
     auto ctx = get_current_ctx();
     Vec2 offset;
-    if(ctx->enable_edge)
+    if(ctx->setting.enable_edge)
     {
-        offset = edge_msaa_template(ctx->msaa_factor, ctx->msaa_index);
+        offset = edge_msaa_template(ctx->setting.msaa_factor, ctx->current_mesa_index());
     }else
     {
-        offset = msaa_template(ctx->msaa_factor, ctx->msaa_index);
+        offset = msaa_template(ctx->setting.msaa_factor, ctx->current_mesa_index());
     }
     st_x = (i * 2 - (w - 1)) * 1.0 / (w - 1) + offset[0] * 2 / (w - 1);
     st_y = (j * 2 - (h - 1)) * 1.0 / (h - 1) + offset[1] * 2 / (h - 1);
@@ -429,35 +454,39 @@ void vert_view_transform(const L_MATH::Mat<float, 4, 4>& mvp, const int w, const
     j = static_cast<int>(xy[1] * alpha[0] + xy[3] * alpha[1] + xy[5] * alpha[2]);
 }
 
-bool add_fragment(TrianglePrimitive& tri, Context* ctx,L_MATH::Vec<float, 3>& alpha, int i, int j)
+bool add_fragment(TrianglePrimitive& tri, Context* ctx,const L_MATH::Vec<float, 3>& alpha, int i, int j)
 {
-    int w,h;
+    int w, h;
     ctx->get_screen_size(w, h);
-    int index = i * w + j + w * h * ctx->msaa_index;
-    if (i * w + j == 76912)
+    auto _index = i * w + j;
+    if (_index < 0 || _index >= w * h)
     {
-        int x1 = 1;
+        return false;
     }
-    auto st_z = tri.v[0][2] * alpha[0] + tri.v[1][2] * alpha[1] + tri.v[2][2] * alpha[2];
+    int index = _index + w * h * ctx->current_mesa_index();
+
     auto current_render_pass = ctx->current_render_pass();
     auto& pass_node = current_render_pass->pass_node;
-    auto depth = pass_node.camera->depth_buff[index];
-    if (depth < st_z)
-    {
-        return false;
-    }
     auto& fragment = pass_node.camera->fragment_map[index];
-    if (L_MATH::is_zero(depth - st_z) && fragment.triangle && fragment.triangle->id < tri.id)
+    if (ctx->setting.enable_depth)
     {
-        return false;
+        auto st_z = tri.v[0][2] * alpha[0] + tri.v[1][2] * alpha[1] + tri.v[2][2] * alpha[2];
+
+        auto depth = pass_node.camera->depth_buff[index];
+        if (depth < st_z||(L_MATH::is_zero(depth - st_z)))
+        {
+            return false;
+        }
+        if (ctx->setting.enable_depth_write)
+        {
+            pass_node.camera->depth_buff[index] = st_z;
+        }
     }
     auto alpha_inv_w = 1 / L_MATH::dot(alpha, tri.inv_w);
-    pass_node.camera->depth_buff[index] = st_z;
-    alpha *= tri.inv_w * alpha_inv_w;
     auto real_z = -1 * alpha_inv_w;
     fragment.triangle = &tri;
     fragment.frag_coord = Vec3{(float)j, (float)i, real_z};
-    fragment.alpha = alpha;
+    fragment.alpha =  alpha * tri.inv_w * alpha_inv_w;
     fragment.resolution[0] = w;
     fragment.draw_call = current_render_pass;
     fragment.resolution[1] = h;
@@ -572,6 +601,10 @@ bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* bvh_tree, float si, float 
     }
     return _is_ray_caster;
 }
+void rast_huge_tri(TrianglePrimitive& tri, Context* ctx)
+{
+
+}
 
 void rast_tri(TrianglePrimitive& tri, Context* ctx)
 {
@@ -579,14 +612,13 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
     ctx->get_screen_size(w, h);
     tri.clip();
     auto vert_count = tri.clip_vert_count;
-    auto& clip_vertices = tri.clip_vertices;
-    auto& alpha_array = tri.clip_vertices_alpha;
+    auto clip_vertices = tri.clip_vertices;
+    auto alpha_array = tri.clip_vertices_alpha;
     if (vert_count == 0)
     {
         return;
     }
     auto clip_vertices_int = new int[vert_count][2];
-    int l_line = 0, top_line;
     for (int i = 0; i < vert_count; ++i)
     {
         if (HUB_TRIANGLE_BREAK_COUNT_MAX == 0)
@@ -602,43 +634,20 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
 
 
     }
+    int l_line = 0;
     int l_y = clip_vertices_int[0][1],
-        m_y = clip_vertices_int[0][1],
-        m_x = clip_vertices_int[0][0],
         l_x = clip_vertices_int[0][0];
 
-    int top_left_v = 0;
 
     for (int i = 0; i < vert_count; ++i)
     {
-        if (clip_vertices_int[i][1] < l_y)
+        if (clip_vertices_int[i][1] < l_y||(clip_vertices_int[i][1] == l_y && clip_vertices_int[i][0] < l_x))
         {
             l_y = clip_vertices_int[i][1];
             l_x = clip_vertices_int[i][0];
             l_line = i;
-        }
-        if (clip_vertices_int[i][1] > m_y)
-        {
-            m_y = clip_vertices_int[i][1];
-            m_x = clip_vertices_int[i][0];
-            top_left_v = i;
-        }
-        if (clip_vertices_int[i][1] == l_y && clip_vertices_int[i][0] < l_x)
-        {
-            l_y = clip_vertices_int[i][1];
-            l_x = clip_vertices_int[i][0];
-            l_line = i;
-        }
-        if (clip_vertices_int[i][1] == m_y && clip_vertices_int[i][0] < m_x)
-        {
-            m_y = clip_vertices_int[i][1];
-            m_x = clip_vertices_int[i][0];
-            top_left_v = i;
         }
     }
-
-
-    top_line = top_left_v;
     int lx, ly, rx, ry, lmx, lmy, rmx, rmy;
     bool next_left = true, next_right = true, jump_line_l, jump_line_r;
     int r_line = (l_line - 1 + vert_count) % vert_count;
@@ -653,46 +662,10 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
     Vec3 l_alpha = alpha_array[l_line];
     Vec3 r_alpha = alpha_array[(r_line + 1) % vert_count];
     Vec3 st_l, st_r;
+
     while (l_line != r_line)
     {
-        int l0 = -1;
-        jump_line_l = clip_vertices_int[l_line][1] == clip_vertices_int[(l_line + 1) % vert_count][1];
-        jump_line_r = clip_vertices_int[r_line][1] == clip_vertices_int[(r_line + 1) % vert_count][1];
-        //水平顶边绘制
-        if ((jump_line_l &&(l_line == top_line || (l_line + 1) % vert_count == top_line)))
-        {
-            l0 = l_line;
-        }
-        if (jump_line_r && (r_line == top_line || (r_line + 1) % vert_count == top_line))
-        {
-            l0 = r_line;
-        }
-        {
-            if(l0==-1)
-            {
-                goto next;
-            }
-            auto l0y = clip_vertices_int[l0][1];
-            auto l0x1 = clip_vertices_int[l0][0];
-            auto l0x2 = clip_vertices_int[(l0 + 1) % vert_count][0];
-            if (l0x1==l0x2)
-            {
-                goto next;
-            }
-            int step = l0x1 > l0x2 ? -1 : 1;
-            auto& alpha_l0 = alpha_array[l0];
-            auto& l_alpha1 = alpha_array[(l0 + 1) % vert_count];
-            float t = 0;
-            Vec3 alpha;
-            for (int i = l0x1 + step; i != l0x2 + step; i += step)
-            {
-                t = (i - l0x1) * 1.0 / (l0x2 - l0x1);
-                alpha = alpha_l0 * (1 - t) + l_alpha1 * t;
-                add_fragment(tri, ctx, alpha, l0y, i);
-            }
-        }
-    next:
-        if (jump_line_l || !l_bresenham_line.has_next())
+        if (jump_line_l || (!l_bresenham_line.has_next() && next_left))
         {
             l_line = (l_line + 1) % vert_count;
             l_alpha = alpha_array[l_line];
@@ -701,7 +674,7 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
                                              clip_vertices_int[(l_line + 1) % vert_count][1]);
             continue;
         }
-        if (jump_line_r || !r_bresenham_line.has_next())
+        if (jump_line_r || (!r_bresenham_line.has_next() && next_right))
         {
             r_line = (r_line - 1 + vert_count) % vert_count;
             r_alpha = alpha_array[(r_line + 1) % vert_count];
@@ -711,16 +684,11 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
                                              clip_vertices_int[r_line][1]);
             continue;
         }
-
         if (next_left)
         {
             l_bresenham_line.next_point(lx, ly, lmx, lmy);
-            // float t = (ly - l_bresenham_line.y1) * 1.0f / (l_bresenham_line.dy);
-            // l_alpha = alpha_array[l_line] * (1 - t) + alpha_array[(l_line + 1) % vert_count] * t;
-            //
             invert_view_transform(w, h, lx, ly, st_l[0], st_l[1]);
             tri.barycentric(st_l, l_alpha);
-
             add_fragment(tri, ctx, l_alpha, ly, lx);
 
         }
@@ -728,9 +696,6 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
         if (next_right)
         {
             r_bresenham_line.next_point(rx, ry, rmx, rmy);
-            // float t = (ry - r_bresenham_line.y1) * 1.0f / (r_bresenham_line.dy);
-            // r_alpha = alpha_array[(r_line + 1) % vert_count] * (1 - t) + alpha_array[r_line] * t;
-
             invert_view_transform(w, h, rx, ry, st_r[0], st_r[1]);
             tri.barycentric(st_r, r_alpha);
             add_fragment(tri, ctx, r_alpha, ry, rx);
@@ -747,14 +712,10 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
             }
             int step = rx > lx ? 1 : -1;
             float t = 0;
-            auto alpha = l_alpha;
             for (int i = lx + step; i != rx; i += step)
             {
-                // t = (i - lx) * 1.0 / (rx - lx);
-                // alpha = l_alpha * (1 - t) + r_alpha * t;
-                invert_view_transform(w, h, i, ry, st_r[0], st_r[1]);
-                tri.barycentric(st_r, alpha);
-                add_fragment(tri, ctx, alpha, ry, i);
+                t = (i - lx) * 1.0 / (rx - lx);
+                add_fragment(tri, ctx, l_alpha * (1 - t) + r_alpha * t, ry, i);
             }
         }
         else if (ly < ry)

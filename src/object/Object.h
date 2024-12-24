@@ -56,6 +56,10 @@ private:
         return 0;
     }
 public:
+    Object(const Object&) = delete;
+    Object(Object&&) = delete;
+    Object& operator=(const Object&) = delete;
+    Object& operator=(Object&&) = delete;
     static int get_type_id(){return type_id;};
     int get_instance_id() const {return instance_id;};
     virtual int inst_get_type_id(){return type_id;};\
@@ -146,6 +150,7 @@ public:
     virtual ~ObjectManger() = default;
     virtual void on_create_obj(T* obj);
     virtual void on_delete_obj(T* obj);
+    VectorRemoveEasy<T*>& get_objects() { return objects; }
 };
 
 template <typename T>

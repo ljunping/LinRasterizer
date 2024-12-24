@@ -1,0 +1,3 @@
+The body vertex color bake textures use the "CustomUV1" UV map. The CustomUV1 is stored in the "Body_CustomUV1" mesh.
+
+The body vertex color could not be baked using the original mesh UVs due to overlapping UV islands.

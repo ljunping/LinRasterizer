@@ -34,13 +34,15 @@ void vert_view_transform(const Mat44& mvp, const int w, const int h, VertexAttri
                                 Vec3& alpha_, int& i,
                                 int& j);
 
-bool add_fragment(TrianglePrimitive& tri,Context* ctx, L_MATH::Vec<float, 3>& alpha, int i, int j);
+bool add_fragment(TrianglePrimitive& tri,Context* ctx,const L_MATH::Vec<float, 3>& alpha, int i, int j);
 
 bool ray_caster(Context* ctx,  float si, float sj, RayCasterResult* result);
 bool ray_caster_bvh(Camera* camera, BVHTree* tree, float si, float sj, RayCasterResult* result);
 bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* tree, float si, float sj, RayCasterResult* result);
 
 void rast_tri(TrianglePrimitive& tri, Context* ctx);
+void rast_huge_tri(TrianglePrimitive& tri, Context* ctx);
+
 void break_huge_triangle(TrianglePrimitive& tri, float area_thr, std::vector<TrianglePrimitive>& result, int& count);
 
 void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
@@ -67,6 +69,8 @@ void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
 Mesh* generate_sphere(float radius, int stacks, int slices);
 
 Mesh* generate_quad();
+
+Mesh* generate_tri();
 
 struct DrawLineInfo
 {

@@ -17,8 +17,8 @@ static void window_resize(Camera* camera)
     auto current_ctx = get_current_ctx();
     int w, h;
     current_ctx->get_screen_size(w, h);
-    camera->fragment_map.resize(w * h * current_ctx->msaa_factor * current_ctx->msaa_factor);
-    camera->depth_buff.resize(w * h * current_ctx->msaa_factor * current_ctx->msaa_factor);
+    camera->fragment_map.resize(w * h * current_ctx->setting.msaa_factor * current_ctx->setting.msaa_factor);
+    camera->depth_buff.resize(w * h * current_ctx->setting.msaa_factor * current_ctx->setting.msaa_factor);
     camera->ratio = w / (float)h;
 }
 
@@ -27,36 +27,28 @@ static void window_resize(EventParam& param, void* camera)
     window_resize((Camera*)camera);
 }
 
-void Camera::update_view_mat()
-{
-    view_mat = L_MATH::look_at(look_dir, L_MATH::UP);
-}
+
 void Camera::update_projection_mat()
 {
     projection_mat = ( is_proj
                          ? L_MATH::project(near, far, fov, ratio)
                          : L_MATH::ortho(near, far, fov, ratio));
 
-    projection_mat = L_MATH::translate(pos * -1) * projection_mat;
 }
 
 Camera::Camera(float near, float far, float fov, float ratio, bool isproj): Component(), near(near), far(far),
                                                                             fov(fov), ratio(ratio), is_proj(isproj)
 {
-    look_dir = L_MATH::FORWARD;
-    pos = Vec3::ZERO;
-    update_view_mat();
     update_projection_mat();
 }
 
 
 void Camera::generate_primitive(Context* ctx)
 {
-    update_view_mat();
     update_projection_mat();
     auto pass = ctx->current_render_pass();
     std::vector<std::pair<int,Mat44>>& meshes = pass->meshes;
-    std::vector<std::tuple<DrawCall*,Mat44>> data(meshes.size());
+    std::vector<std::tuple<DrawCallData*,Mat44>> data(meshes.size());
 
     int pri_size = 0;
     for (int i = 0; i < meshes.size(); ++i)
@@ -64,9 +56,8 @@ void Camera::generate_primitive(Context* ctx)
         auto& mesh_pair = meshes[i];
         auto& mesh = mesh_pair.first;
         auto& model_mat = mesh_pair.second;
-        Mat44 mvp = projection_mat * view_mat * model_mat;
         pri_size += Resource::get_resource<Mesh>(mesh)->tri_count();
-        data[i] = std::make_tuple(pass, mvp);
+        data[i] = std::make_tuple(pass, projection_mat * get_view_mat() * model_mat);
     }
     pass->assign_triangle_primitives(pri_size);
     int final_job_group_id = 0;
@@ -90,7 +81,7 @@ void Camera::generate_primitive(Context* ctx)
     }
 
     JOB_SYSTEM.wait_job_group_finish(final_job_group_id);
-    if (ctx->build_bvh)
+    if (ctx->setting.build_bvh)
     {
         pass->build_bvh_tree();
     }
@@ -116,13 +107,13 @@ void Camera::on_create()
 
     auto current_ctx = get_current_ctx();
     window_resize(this);
-    current_ctx->cameras.push_back(this);
+    current_ctx->camara_manager->on_create_obj(this);
 }
 
 void Camera::on_delete()
 {
-    auto& cameras = get_current_ctx()->cameras;
-    cameras.erase(std::find(cameras.begin(), cameras.end(), this));
+    auto current_ctx = get_current_ctx();
+    current_ctx->camara_manager->on_delete_obj(this);
     EventSystem::unregister_listener(WindowSizeChange, window_resize, this);
     EventSystem::unregister_listener(MSAAUpdate, window_resize, (void*)this);
     Component::on_delete();
@@ -157,7 +148,6 @@ int Camera::render_fragment(Context* ctx)
     ctx->get_screen_size(w, h);
     auto current_render_pass = ctx->current_render_pass();
     auto frag_shader = Resource::get_resource<FragShader>(current_render_pass->pass_node.frag_shader);
-    frag_shader->begin_render_pass(ctx, current_render_pass);
     auto prepare_fence = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(prepare_fence, 0,
                           0, w * h,
@@ -190,6 +180,14 @@ int Camera::clear(Context* ctx)
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);
     return job_group;
+}
+
+L_MATH::Mat<float, 4, 4> Camera::get_view_mat() const
+{
+    Mat44 view_mat;
+    auto local_to_global_mat = this->scene_node->get_local_to_global_mat();
+    L_MATH::invert_trs_mat(local_to_global_mat, view_mat);
+    return view_mat;
 }
 
 
@@ -237,10 +235,9 @@ void Camera::draw_begin(Context* ctx)
 void Camera::draw_end(Context* ctx)
 {
     wait_finish();
-    auto current_render_pass = ctx->current_render_pass();
-    auto frag_shader = Resource::get_resource<FragShader>(current_render_pass->pass_node.frag_shader);
-    frag_shader->end_render_pass(ctx, current_render_pass);
 }
+
+
 
 
 

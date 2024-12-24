@@ -60,7 +60,7 @@ template <class ... Args>
 void EventSystem::dispatch_event(EventType type, Args&& ...args)
 {
     EventParam param;
-    EventParamGenerator<Args...>::template build_event_param<>(param, args...);
+    EventParamGenerator<Args...>::template build_event_param<>(param, std::forward<Args>(args)...);
     dispatch_event(type, param);
 }
 

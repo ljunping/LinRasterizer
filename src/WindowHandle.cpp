@@ -2,6 +2,7 @@
 #include "WindowHandle.h"
 #include "Color.h"
 #include "Context.h"
+#include "EventSystem.h"
 #include "JobSystem.h"
 
 #if WINDOW_X11
@@ -24,7 +25,7 @@ WindowHandle::~WindowHandle() {
     close();
 }
 
-void WindowHandle::on_key_event(int keysym)
+void WindowHandle::on_key_event(XEvent& keysym)
 {
     get_current_ctx()->on_key_event(keysym);
 }
@@ -44,13 +45,7 @@ void WindowHandle::event_loop()
                 on_resize(xce.width, xce.height);
             }
         }
-        if (event.type == KeyPress)
-        {
-            // 获取按键事件
-            KeySym keysym = XLookupKeysym(&event.xkey, 0); // 获取 keysym，0 表示不使用修饰键
-            on_key_event(keysym);
-
-        }
+        on_key_event(event);
     }
 }
 
@@ -76,7 +71,8 @@ void WindowHandle::on_resize(int _w, int _h)
                                   ZPixmap, 0, (char*)malloc(w * h * 4), w, h, 32, 0);
         std::fill((int*)frame_buffs[i]->data, (int*)frame_buffs[i]->data + w * h, BLACK);
     }
-    get_current_ctx()->on_window_resize(w, h);
+    std::cout << "Context::on_window_resize(" << w << ", " << h << ")" << std::endl;
+    EventSystem::dispatch_event(WindowSizeChange, w, h);
 }
 
 
