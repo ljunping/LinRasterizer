@@ -160,7 +160,7 @@ int main()
     // add_mesh_render(tri_node, _lightFragShader0, _material0, texture, 1, false);
     // add_mesh_render(venti_node, _lightFragShader0, _material0, texture, 1, false);
 
-    auto _pig_mesh_provider_mesh_render = add_mesh_render(_pig_mesh_provider, _NormalTextureLightFragShader0, _light_material, texture, 1,
+    auto _pig_mesh_provider_mesh_render = add_mesh_render(_pig_mesh_provider, _lightFragShader0, _light_material, texture, 1,
                                        false);
     _pig_mesh_provider_mesh_render->textures[1] = normal_texture->get_resource_id();
     ctx->main_loop();
