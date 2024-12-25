@@ -30,6 +30,7 @@ DEFINE_TYPE(Material)
 DEFINE_TYPE(Resource)
 DEFINE_TYPE(MeshProvider)
 DEFINE_TYPE(LightFragShader)
+DEFINE_TYPE(NormalTextureLightFragShader)
 DEFINE_TYPE(Light)
 
 
@@ -91,6 +92,7 @@ void TypeFactory::RegisterTypes()
     REGISTER_TYPE(MeshProvider)
     REGISTER_TYPE(LightFragShader)
     REGISTER_TYPE(Light);
+    REGISTER_TYPE(NormalTextureLightFragShader)
 }
 
 

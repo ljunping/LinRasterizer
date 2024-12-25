@@ -10,25 +10,45 @@
 #include "Transform.h"
 
 
-bool compare_transparent_render_node(const RenderNode& a, const RenderNode& b)
+static bool compare_transparent_render_node(const RenderNode& a, const RenderNode& b)
 {
     return a.model_matrix[3][2] < b.model_matrix[3][2];
+}
+
+static bool less_compare_array(const int* a, const int* b, int count)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        if (a[i] < b[i]) return true;
+    }
+    return false;
+}
+
+
+static bool equal_compare_array(const int* a, const int* b, int count)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        if (a[i]!=b[i]) return false;
+    }
+    return true;
 }
 
 bool less_compare_render_node(const RenderNode& a, const RenderNode& b)
 {
     return a.render_order < b.render_order
-        || a.texture < b.texture
-        || a.material < b.material
+        || less_compare_array(a.materials, b.materials,MAX_MATERIAL_COUNT)
+        || less_compare_array(a.textures, b.textures,MAX_TEXTURES_COUNT)
         || a.frag_shader < b.frag_shader;
+
 }
 
 bool equal_compare_render_node(const RenderNode& a, const RenderNode& b)
 {
     return
-    a.render_order == b.render_order
-        && a.texture == b.texture
-        && a.material == b.material
+        a.render_order == b.render_order
+        && equal_compare_array(a.materials, b.materials,MAX_MATERIAL_COUNT)
+        && equal_compare_array(a.textures, b.textures,MAX_TEXTURES_COUNT)
         && a.frag_shader == b.frag_shader;
 }
 
@@ -50,9 +70,15 @@ void DrawCallData::init(const RenderNode& node)
         is_init = true;
         pass_node = node;
         this->ctx = get_current_ctx();
-        this->texture0 = Resource::get_resource<Texture>(node.texture);
-        this->frag_shader0 = Resource::get_resource<FragShader>(node.frag_shader);
-        this->material0 = Resource::get_resource<Material>(node.material);
+        for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
+        {
+            this->materials[i] = Resource::get_resource<Material>(node.materials[i]);
+        }
+        for (int i = 0; i < MAX_TEXTURES_COUNT; ++i)
+        {
+            this->textures[i] = Resource::get_resource<Texture>(node.textures[i]);
+        }
+        this->frag_shader = Resource::get_resource<FragShader>(node.frag_shader);
         this->frame_buff = ctx->get_frame_buffer(node.frame_buff_index);
     }
 }
@@ -81,12 +107,12 @@ void DrawCallData::build_bvh_tree()
 
 void DrawCallData::draw_call_begin()
 {
-    this->frag_shader0->begin_draw_call(this);
+    this->frag_shader->begin_draw_call(this);
 }
 
 void DrawCallData::draw_call_end()
 {
-    this->frag_shader0->end_draw_call(this);
+    this->frag_shader->end_draw_call(this);
 }
 
 void DrawCallData::get_model_matrix(const Mesh* mesh, L_MATH::Mat<float, 4, 4>& m) const
@@ -166,8 +192,14 @@ void MeshRender::collect_render_node(Camera* camera,std::vector<RenderNode>& ren
     render_node.render_order = this->render_order;
     render_node.transparent = this->transparent;
     render_node.camera = camera;
-    render_node.texture = this->texture;
-    render_node.material = this->material;
+    for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
+    {
+        render_node.materials[i] = this->materials[i];
+    }
+    for (int i = 0; i < MAX_TEXTURES_COUNT; ++i)
+    {
+        render_node.textures[i] = this->textures[i];
+    }
 }
 
 void RenderManager::collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes, bool transparent)

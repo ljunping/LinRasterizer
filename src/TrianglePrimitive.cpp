@@ -187,9 +187,11 @@ void TrianglePrimitive::update(const L_MATH::Mat<float, 4, 4>& mat)
 {
     for (int i = 0; i < 3; ++i)
     {
-        Vec4 v4 = Vec4(mat * Vec4(v[i], 1));
-        v[i] = Vec3(v4) / v4[3];
-        inv_w[i] = 1 / v4[3];
+        Vec4& _v4 = static_cast<L_MATH::Vec<float, 4>&>(v[i]);
+        _v4[3] = 1;
+        _v4 = _v4.mul_transpose(mat);
+        inv_w[i] = 1 / _v4[3];
+        _v4 /= _v4[3];
     }
     update_param();
 }

@@ -1,3 +1,5 @@
+#include <span>
+
 #include "L_math.h"
 #include "Camera.h"
 #include "WindowHandle.h"
@@ -15,20 +17,19 @@ int next_layer()
     return 1 << (layer++);
 }
 
-void add_mesh_render(Transform* node, FragShader* frag_shader, Material* material,
+MeshRender* add_mesh_render(Transform* node, FragShader* frag_shader, Material* material,
                      Texture* texture,
                      int render_layer, bool transparent)
 {
-
     auto meshrender = node->add_component<MeshRender>();
     meshrender->frag_shader = frag_shader->get_resource_id();
     meshrender->frame_buff_index = 0;
     meshrender->transparent = transparent;
     meshrender->render_layer = render_layer;
-    meshrender->material = material->get_resource_id();
-    meshrender->texture = texture->get_resource_id();
+    meshrender->materials[0] = material->get_resource_id();
+    meshrender->textures[0] = texture->get_resource_id();
+    return meshrender;
 }
-
 
 Mesh* vert_buff()
 {
@@ -68,7 +69,7 @@ int main()
     auto& setting = ctx->setting;
     setting.enable_ray_cast = false;
     setting.build_bvh = false;
-    setting.msaa_factor = 1;
+    setting.msaa_factor = 4;
     setting.enable_edge = false;
     setting.background_color = BLACK;
     setting.enable_mipmap = true;
@@ -88,9 +89,12 @@ int main()
     auto _text_frag_shader0 = Resource::get_or_create_resource<TextureFragShader>("TextureFragShader_Sphere.frag");
     auto _frag_shader0 = Resource::get_or_create_resource<FragShader>("FragShader_Sphere.frag");
     auto _lightFragShader0 = Resource::get_or_create_resource<LightFragShader>("LightFragShader.frag");
+    auto _NormalTextureLightFragShader0 = Resource::get_or_create_resource<NormalTextureLightFragShader>(
+        "NormalTextureLightFragShader.frag");
 
+    auto texture = Resource::create_resource<Texture>("cat-7737618_1280.jpg", "cat-7737618_1280.jpg", true);
+    auto normal_texture = Resource::create_resource<Texture>("noise.jpeg", "noise.jpeg", true);
 
-    auto texture = Resource::create_resource<Texture>("black_white_box.png", "black_white_box.png", true);
     auto _material0 = Resource::create_resource<Material>("default.mat");
     _material0->set_Vec4_uniform(MATERIAL_COLOR1, {1, 0, 0, 0.5});
 
@@ -101,6 +105,7 @@ int main()
     _material2->set_Vec4_uniform(MATERIAL_COLOR1, {0, 0, 1, 0.5});
 
     auto _light_material = Resource::create_resource<Material>("light0.mat");
+    _light_material->set_Vec4_uniform(MATERIAL_COLOR1, {1, 0, 0, 0.5});
     _light_material->set_Vec3_uniform(MATERIAL_LIGHT_KD, {0.5, 0.2, 0.7});
     _light_material->set_Vec3_uniform(MATERIAL_LIGHT_KS, {0.7, 0.7, 0.7});
 
@@ -123,8 +128,8 @@ int main()
     venti_node->local_scale*=0.001;
     // venti_node->get_component<MeshProvider>()->locate_centroid(camera);
     //sphere
-    auto sphere_node = create_mesh_provider(generate_sphere(0.5, 100, 100));
-    sphere_node->local_pos = {0, 0, -1};
+    auto sphere_node = create_mesh_provider(generate_sphere(0.5, 30, 30));
+    sphere_node->local_pos = {0, 0, -2};
     sphere_node->local_scale={0.5, 0.5, 0.5};
 
     //quad
@@ -136,7 +141,7 @@ int main()
     auto quad_node2 = create_mesh_provider(generate_quad());
     quad_node2->local_euler_angles = {-0, 0, 0};
     quad_node2->local_pos = Vec3{0.2f, 00, -1};
-    quad_node2->local_scale={2, 2, 2};
+    quad_node2->local_scale={1, 1, 1};
 
     auto tri_node = create_mesh_provider(generate_tri());
     tri_node->local_euler_angles = {-0, 0, 0};
@@ -150,12 +155,14 @@ int main()
     _vert_buff->local_euler_angles = Vec3{50, 0, 0};
 
     // add_mesh_render(quad_node2, _frag_shader0, _material0, texture, 1, true);
-    // add_mesh_render(sphere_node, _frag_shader0, _material1, texture, 1, true);
-    // add_mesh_render(quad_node, _frag_shader0, _material2, texture, 1, true);
-    add_mesh_render(_pig_mesh_provider, _lightFragShader0, _light_material, texture, 1, false);
-    // add_mesh_render(tri_node, _frag_shader0, _material0, texture, 1, true);
-    // add_mesh_render(venti_node, _frag_shader0, _material0, texture, 1, false);
+    // add_mesh_render(sphere_node, _lightFragShader0, _light_material, texture, 1, false);
+    // add_mesh_render(quad_node, _lightFragShader0, _material2, texture, 1, true);
+    // add_mesh_render(tri_node, _lightFragShader0, _material0, texture, 1, false);
+    // add_mesh_render(venti_node, _lightFragShader0, _material0, texture, 1, false);
 
+    auto _pig_mesh_provider_mesh_render = add_mesh_render(_pig_mesh_provider, _NormalTextureLightFragShader0, _light_material, texture, 1,
+                                       false);
+    _pig_mesh_provider_mesh_render->textures[1] = normal_texture->get_resource_id();
     ctx->main_loop();
     return 0;
 }

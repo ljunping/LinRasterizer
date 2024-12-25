@@ -20,11 +20,11 @@ class Material;
 
 struct Fragment
 {
-    TrianglePrimitive* triangle = nullptr;
+    TrianglePrimitive* triangle{};
     Vec3 alpha;
     Vec3 frag_coord;
     Vec2 resolution;
-    DrawCallData* draw_call;
+    DrawCallData* draw_call{};
     VertexAttribute vertex_attribute;
 };
 
@@ -57,6 +57,8 @@ public:
     void ddy(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result);
     template <int N>
     void df(int frag_index_l, int frag_index_r, int attribute_index, L_MATH::Vec<float, N>& result);
+    Fragment& get_fragment(int frag_index) const;
+    void sample_texture(int texture_index, int frag_index,Vec4& color);
     template <int N>
     void sample_texture(int frag_index, Texture* texture, L_MATH::Vec<float, N>& result);
 };
@@ -69,12 +71,19 @@ public:
 }
 ;
 
-class LightFragShader : public TextureFragShader
+class LightFragShader : public FragShader
 {
-    INIT_TYPE(LightFragShader, TextureFragShader)
+    INIT_TYPE(LightFragShader, FragShader)
 public:
     Vec4 run(int frag_index) override;
+    virtual void calculate_normal(int frag_index,Vec3& res);
+};
 
+class NormalTextureLightFragShader : public LightFragShader
+{
+    INIT_TYPE(NormalTextureLightFragShader, LightFragShader)
+public:
+    void calculate_normal(int frag_index, L_MATH::Vec<float, 3>& res) override;
 };
 template <int N>
 void FragShader::ddx(int frag_index, int attribute_index, L_MATH::Vec<float, N>& result)

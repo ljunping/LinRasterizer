@@ -2,6 +2,10 @@
 
 #include "TrianglePrimitive.h"
 
+
+static int intersect_traverse_count = 0;
+
+
 template <int N>
 Box<N>::Box()
 {
@@ -161,9 +165,11 @@ BVHNode* BVHTree::build_BVH(std::vector<TrianglePrimitive*>::iterator begin,
     return new_BVHNode(combinedAABB, leftBVH, rightBVH, nullptr);
 }
 
-inline bool BVHTree::traverse_BVH(const BVHNode* node, const L_MATH::Vec<float, 3>& origin,
+
+bool BVHTree::traverse_BVH(const BVHNode* node, const L_MATH::Vec<float, 3>& origin,
                                   const L_MATH::Vec<float, 3>& dir, float tMin, float tMax, std::vector<RayCasterResult>& result)
 {
+    // intersect_traverse_count++;
     if (!node || !intersect_box(node->aabb, origin, dir, tMin, tMax))
     {
         return false;
@@ -234,7 +240,10 @@ bool BVHTree::intersect_traverse(const L_MATH::Vec<float, 3>& origin, const L_MA
 {
     float minT = -INFINITY;
     float maxT = INFINITY;
-    return traverse_BVH(root, origin, dir, minT, maxT, result);
+    // intersect_traverse_count = 0;
+    bool res = traverse_BVH(root, origin, dir, minT, maxT, result);
+    // printf("intersect_traverse %d\n", intersect_traverse_count);
+    return res;
 }
 
 bool BVHTree::intersect_compare_distance(const L_MATH::Vec<float, 3>& origin, const L_MATH::Vec<float, 3>& dir,
@@ -242,16 +251,18 @@ bool BVHTree::intersect_compare_distance(const L_MATH::Vec<float, 3>& origin, co
 {
 
     std::priority_queue<std::pair<float, BVHNode*>, std::vector<std::pair<float, BVHNode*>>, std::greater<>> queue;
-    float minT = -INFINITY, max = INFINITY;
+    float minT = -std::numeric_limits<float>::infinity(), max = std::numeric_limits<float>::infinity();
     if (intersect_box(root->aabb, origin, dir, minT, max))
     {
         queue.emplace(box_distance(root->aabb), root);
     }
-    float maxDistance = -INFINITY;
+    float maxDistance = -std::numeric_limits<float>::infinity();
     bool find = false;
+    // int __count = 0;
     while (!queue.empty())
     {
-        auto& top = queue.top();
+        // __count++;
+        auto top = queue.top();
         auto distance = top.first;
         auto node = top.second;
         queue.pop();
@@ -270,21 +281,16 @@ bool BVHTree::intersect_compare_distance(const L_MATH::Vec<float, 3>& origin, co
         }
         else
         {
-            if (node->left)
+            if (node->left && node->left->aabb.intersect(origin, dir, minT, max))
             {
-                if (node->left->aabb.intersect(origin, dir, minT, max))
-                {
-                    queue.emplace(box_distance(node->left->aabb), node->left);
-                }
+                queue.emplace(box_distance(node->left->aabb), node->left);
             }
-            if (node->right)
+            if (node->right && node->right->aabb.intersect(origin, dir, minT, max))
             {
-                if (node->right->aabb.intersect(origin, dir, minT, max))
-                {
-                    queue.emplace(box_distance(node->right->aabb), node->right);
-                }
+                queue.emplace(box_distance(node->right->aabb), node->right);
             }
         }
     }
+    // printf("intersect_compare_distance %d\n", __count);
     return find;
 }

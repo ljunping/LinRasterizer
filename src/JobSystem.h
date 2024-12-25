@@ -45,10 +45,8 @@ struct JobGroup
     explicit JobGroup(int group_id,int depend_group_id ):group_id(group_id),depend_group_id(depend_group_id)
     {
     }
-    JobGroup& operator=(const JobGroup& other)
-    {
-        throw std::runtime_error("Copy constructor not allowed");
-    }
+
+    JobGroup& operator=(const JobGroup& other) = delete;
 
     void assign_job(Job& job)
     {

@@ -9,7 +9,8 @@
 #include "Material.h"
 #include "Transform.h"
 class Context;
-
+#define MAX_TEXTURES_COUNT 4
+#define MAX_MATERIAL_COUNT 4
 struct RenderNode
 {
     bool transparent{};
@@ -18,8 +19,8 @@ struct RenderNode
     Mat44 model_matrix;
     Camera* camera{};
     int frame_buff_index{};
-    int texture;
-    int material;
+    int textures[MAX_TEXTURES_COUNT];
+    int materials[MAX_MATERIAL_COUNT];
     int frag_shader;
 };
 
@@ -35,9 +36,9 @@ struct DrawCallData
     bool is_init = false;
     std::vector<std::pair<int,Mat44>> meshes;
     std::vector<TrianglePrimitive*> primitives;
-    Material* material0{};
-    Texture* texture0{};
-    FragShader* frag_shader0{};
+    Material* materials[MAX_MATERIAL_COUNT]{};
+    Texture* textures[MAX_TEXTURES_COUNT]{};
+    FragShader* frag_shader{};
     Color* frame_buff{};
     BVHTree* bvh_tree{};
     TrianglePrimitive* tri_pool{};
@@ -82,13 +83,9 @@ class MeshRender : public RenderComponent
 public:
     int frame_buff_index = 0;
     const bool NEED_UPDATE{true};
-    int texture{};
-    int material{};
+    int textures[MAX_TEXTURES_COUNT];
+    int materials[MAX_MATERIAL_COUNT];
     int frag_shader{};
-    //如果需要多纹理材质支持则
-    // int texture1;
-    // int material1;
-    // int frag_shader1;
     void collect_render_node(Camera* camera,std::vector<RenderNode>& render_nodes) override;
 };
 

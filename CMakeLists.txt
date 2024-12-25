@@ -19,6 +19,11 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -g")
 endif()
 
+# 添加编译器选项，针对 Debug 定义 DEBUG 宏
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+endif()
+
 #
 #file(GLOB_RECURSE LUA_SOURCES_C "lua-5.4.7/src/*.c")
 #file(GLOB_RECURSE LUA_SOURCES_HEADER "lua-5.4.7/src/*.h")

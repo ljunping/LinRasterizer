@@ -45,6 +45,7 @@ Camera::Camera(float near, float far, float fov, float ratio, bool isproj): Comp
 
 void Camera::generate_primitive(Context* ctx)
 {
+
     update_projection_mat();
     auto pass = ctx->current_render_pass();
     std::vector<std::pair<int,Mat44>>& meshes = pass->meshes;

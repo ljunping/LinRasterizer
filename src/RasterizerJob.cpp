@@ -217,6 +217,7 @@ void rast_tri_execute(std::size_t data_begin,std::size_t data_end, void* global_
         {
             continue;
         }
+
         for (int j = 0; j < ctx->setting.msaa_factor; ++j)
         {
             rast_tri(triangle_primitive, ctx);
@@ -254,6 +255,7 @@ void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
                 mesh.generate_triangle(tri, index);
                 break;
             }
+
             index -= mesh.tri_count();
         }
     };
@@ -279,7 +281,7 @@ void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
 
 Mesh* generate_sphere(float radius, int stacks, int slices)
 {
-    float* vert_buff = new float[5 * (stacks + 1) * (slices + 1)];
+    float* vert_buff = new float[8 * (stacks + 1) * (slices + 1)];
 
     // Generate vertices
     for (int stack = 0; stack < stacks; ++stack)
@@ -291,18 +293,24 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
             float x = radius * sin(phi) * cos(theta);
             float y = radius * sin(phi) * sin(theta);
             float z = radius * cos(phi);
-            vert_buff[5 * (stack * (slices + 1) + slice)] =x;
-            vert_buff[5 * (stack * (slices + 1) + slice) + 1] = y;
-            vert_buff[5 * (stack * (slices + 1) + slice) + 2] = z;
-            vert_buff[5 * (stack * (slices + 1) + slice) + 3] = stack*1.0f / stacks;
-            vert_buff[5 * (stack * (slices + 1) + slice) + 4] = slice * 1.0f / slices;
+            vert_buff[8 * (stack * (slices + 1) + slice)] = x;
+            vert_buff[8 * (stack * (slices + 1) + slice) + 1] = y;
+            vert_buff[8 * (stack * (slices + 1) + slice) + 2] = z;
+
+            vert_buff[8 * (stack * (slices + 1) + slice) + 3] = x;
+            vert_buff[8 * (stack * (slices + 1) + slice) + 4] = y;
+            vert_buff[8 * (stack * (slices + 1) + slice) + 5] = z;
+
+            vert_buff[8 * (stack * (slices + 1) + slice) + 6] = stack*1.0f / stacks;
+            vert_buff[8 * (stack * (slices + 1) + slice) + 7] = slice * 1.0f / slices;
 
         }
     }
     SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 5 * (stacks + 1) * (slices + 1));
-    _Attributes->bind_attribute(POS,3, 0, 5);
-    _Attributes->bind_attribute(UV,2, 3, 5);
+    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 8 * (stacks + 1) * (slices + 1));
+    _Attributes->bind_attribute(POS,3, 0, 8);
+    _Attributes->bind_attribute(NORMAL,3, 3, 8);
+    _Attributes->bind_attribute(UV, 2, 6, 8);
     std::vector<int> eb0;
     // Generate triangles
     for (int stack = 0; stack < stacks; ++stack)
@@ -337,35 +345,38 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
 
 Mesh* generate_quad()
 {
-    float* vert_buff = new float[4 * 5]
+    float* vert_buff = new float[4 * 8]
     {
-        -0.5, -0.5, 0, 0, 0,
-        0.5, -0.5, 0, 1, 0,
-        -0.5, 0.5, 0, 0, 1,
-        0.5, 0.5, 0, 1, 1,
+        -0.5, -0.5, 0, 0, 0, 1, 0, 0,
+        0.5, -0.5, 0, 0, 0, 1, 1, 0,
+        -0.5, 0.5, 0, 0, 0, 1, 0, 1,
+        0.5, 0.5, 0, 0, 0, 1, 1, 1,
     };
 
     SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 4*5);
-    _Attributes->bind_attribute(POS,3, 0, 5);
-    _Attributes->bind_attribute(UV, 2, 3, 5);
+    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 4*8);
+    _Attributes->bind_attribute(POS,3, 0, 8);
+    _Attributes->bind_attribute(NORMAL,3, 3, 8);
+    _Attributes->bind_attribute(UV, 2, 6, 8);
     _Attributes->ebo = {0, 1, 2, 1, 3, 2};
     return _Attributes;
 }
 
 Mesh* generate_tri()
 {
-    float* vert_buff = new float[3 * 5]
+    float* vert_buff = new float[4 * 8]
     {
-        -0.5, -0.5, 0, 0, 0,
-        0.5, -0.5, 0, 1, 0,
-        -0.5, 0.5, 0, 0, 1,
+        -0.5, -0.5, 0, 0, 0, 1, 0, 0,
+        0.5, -0.5, 0, 0, 0, 1, 1, 0,
+        -0.5, 0.5, 0, 0, 0, 1, 0, 1,
+        0.5, 0.5, 0, 0, 0, 1, 1, 1,
     };
 
     SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 3*5);
-    _Attributes->bind_attribute(POS,3, 0, 5);
-    _Attributes->bind_attribute(UV, 2, 3, 5);
+    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 4*8);
+    _Attributes->bind_attribute(POS,3, 0, 8);
+    _Attributes->bind_attribute(NORMAL,3, 3, 8);
+    _Attributes->bind_attribute(UV, 2, 6, 8);
     _Attributes->ebo = {0, 1, 2};
     return _Attributes;
 }
@@ -441,14 +452,16 @@ void vert_view_transform(const L_MATH::Mat<float, 4, 4>& mvp, const int w, const
     Vec3 alpha = vertex_attribute[0].alpha * alpha_[0] + vertex_attribute[1].alpha * alpha_[1] + vertex_attribute[2].
         alpha * alpha_[2];
     Vec3 result;
+    Vec4& result4 = static_cast<L_MATH::Vec<float, 4>&>(result);
+    result4[3] = 1;
     auto attributes = vertex_attribute->attributes;
     //每个三角形的三个顶点的vertex_attribute.v是一致的
     for (int k = 0; k < 3; ++k)
     {
         attributes->get_attribute_value(vertex_attribute->v[k], 0, result);
-        auto var = (Vec4)(mvp * Vec4(result, 1));
-        var /= var[3];
-        view_transform(w, h, var[0], var[1], xy[k * 2], xy[k * 2 + 1]);
+        result4 = result4 * mvp;
+        result4 /= result4[3];
+        view_transform(w, h, result4[0], result4[1], xy[k * 2], xy[k * 2 + 1]);
     }
     i = static_cast<int>(xy[0] * alpha[0] + xy[2] * alpha[1] + xy[4] * alpha[2]);
     j = static_cast<int>(xy[1] * alpha[0] + xy[3] * alpha[1] + xy[5] * alpha[2]);
@@ -456,6 +469,7 @@ void vert_view_transform(const L_MATH::Mat<float, 4, 4>& mvp, const int w, const
 
 bool add_fragment(TrianglePrimitive& tri, Context* ctx,const L_MATH::Vec<float, 3>& alpha, int i, int j)
 {
+
     int w, h;
     ctx->get_screen_size(w, h);
     auto _index = i * w + j;
@@ -608,6 +622,7 @@ void rast_huge_tri(TrianglePrimitive& tri, Context* ctx)
 
 void rast_tri(TrianglePrimitive& tri, Context* ctx)
 {
+
     int w,h;
     ctx->get_screen_size(w, h);
     tri.clip();
@@ -618,6 +633,7 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
     {
         return;
     }
+
     auto clip_vertices_int = new int[vert_count][2];
     for (int i = 0; i < vert_count; ++i)
     {
@@ -665,8 +681,9 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
 
     while (l_line != r_line)
     {
-        if (jump_line_l || (!l_bresenham_line.has_next() && next_left))
+        if ((!l_bresenham_line.has_next() && next_left))
         {
+
             l_line = (l_line + 1) % vert_count;
             l_alpha = alpha_array[l_line];
             l_bresenham_line = BresenhamLine(clip_vertices_int[l_line][0], clip_vertices_int[l_line][1],
@@ -674,7 +691,7 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
                                              clip_vertices_int[(l_line + 1) % vert_count][1]);
             continue;
         }
-        if (jump_line_r || (!r_bresenham_line.has_next() && next_right))
+        if ((!r_bresenham_line.has_next() && next_right))
         {
             r_line = (r_line - 1 + vert_count) % vert_count;
             r_alpha = alpha_array[(r_line + 1) % vert_count];

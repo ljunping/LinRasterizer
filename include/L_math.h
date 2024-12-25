@@ -5,10 +5,10 @@
 #ifndef L_MATH_H
 #define L_MATH_H
 #pragma once
+#include <algorithm>
 #include <cmath>
 #include <initializer_list>
 #include <stdexcept>
-
 
 //MACRO DEFINE
 #define PI 3.1415926535897932384626433832795
@@ -51,6 +51,8 @@ p1[i]=p1[i] operate p2[i];\
 //从1开始计数
 #define FIRST_1_BIT_COUNT(n) __builtin_ffs(n)
 
+
+
 //临时宏,退出文件去除
 #define FUNC_PARAM_DECLARE_ERROR(...)
 #define FUNC_PARAM_DECLARE_2(a, b)  ,a b
@@ -67,10 +69,12 @@ p1[i]=p1[i] operate p2[i];\
     Mat<T, ROW, COL> operator OPT(const T& other) const;\
     void operator OPT##=(const T& other);
 #define DECLARE_VEC_OPT(OPT,COL) \
-    Vec<T, COL> operator OPT(const Vec<T, COL>& other) const;\
+    template <int COL2>\
+    Vec<T, MIN_RC<COL, COL2>> operator OPT(const Vec<T, COL2>& other) const;\
     Vec<T, COL> operator OPT(const T& other) const;\
-    void operator OPT##=(const T& other);\
-    void operator OPT##=(const Vec<T, COL>& other);
+    template <int COL2>\
+    void operator OPT##=(const Vec<T, COL2>& other);\
+    void operator OPT##=(const T& other);
 #define DEFINE_MAT_OPT(OPT) \
     template <typename T, int ROW, int COL>\
     Mat<T, ROW, COL> Mat<T, ROW, COL>::operator OPT(const Mat<T, ROW, COL>& other) const\
@@ -123,15 +127,16 @@ p1[i]=p1[i] operate p2[i];\
     }
 #define DEFINE_VEC_OPT(OPT) \
     template <typename T, int COL>\
-    Vec<T, COL> Vec<T, COL>::operator OPT(const Vec<T, COL>& other) const\
+    template <int COL2>\
+    Vec<T, MIN_RC<COL, COL2>> Vec<T, COL>:: operator OPT(const Vec<T, COL2>& other) const\
     {\
-        Vec<T, COL> result;\
-        if constexpr (COL == 2)\
+        Vec<T, MIN_RC<COL, COL2>> result;\
+        if constexpr (MIN_RC<COL, COL2> == 2)\
         {\
             result.data[0] = data[0] OPT other.data[0];\
             result.data[1] = data[1] OPT other.data[1];\
         }\
-        if constexpr (COL == 3)\
+        if constexpr (MIN_RC<COL, COL2> == 3)\
         {\
             result.data[0] = data[0] OPT other.data[0];\
             result.data[1] = data[1] OPT other.data[1];\
@@ -139,7 +144,7 @@ p1[i]=p1[i] operate p2[i];\
         }\
         else\
         {\
-            for (int i = 0; i < COL; ++i)\
+            for (int i = 0; i < MIN_RC<COL, COL2>; ++i)\
             {\
                 result.data[i] = data[i] OPT other.data[i];\
             }\
@@ -191,23 +196,24 @@ p1[i]=p1[i] operate p2[i];\
             data[i] OPT##= other;\
         }\
     }\
-    template <typename T, int COL>\
-    void Vec<T, COL>::operator OPT##=(const Vec<T, COL>& other)\
+    template <typename  T, int COL>\
+    template <int COL2>\
+    void Vec<T, COL>::operator OPT##=(const Vec<T, COL2>& other)\
     {\
-        if constexpr (COL == 2)\
+        if constexpr (MIN_RC<COL, COL2> == 2)\
         {\
             data[0] OPT##= other[0];\
             data[1] OPT##= other[1];\
             return;\
         }\
-        if constexpr (COL == 3)\
+        if constexpr (MIN_RC<COL, COL2> == 3)\
         {\
             data[0] OPT##= other[0];\
             data[1] OPT##= other[1];\
             data[2] OPT##= other[2];\
             return;\
         }\
-        for (int i = 0; i < COL; ++i)\
+        for (int i = 0; i < MIN_RC<COL, COL2>; ++i)\
         {\
             data[i] OPT##= other[i];\
         }\
@@ -295,7 +301,6 @@ p1[i]=p1[i] operate p2[i];\
 
 namespace L_MATH
 {
-
     inline bool is_zero(float x)
     {
         return fabs(x) < EPSILON;
@@ -307,37 +312,32 @@ namespace L_MATH
     extern Vec<float, 3> UP;
     extern Vec<float, 3> LEFT;
 
+    template <int Row, int Col>
+    constexpr int min()
+    {
+        return (Row < Col) ? Row : Col;
+    }
+    template <int Row, int Col>
+    constexpr int max()
+    {
+        return (Row < Col) ? Col : Row;
+    }
+
+    template <int Row, int Col>
+    constexpr int MIN_RC = min<Row, Col>();
+
+    template <int Row, int Col>
+    constexpr int MAX_RC = max<Row, Col>();
+
     template <typename T, int Row, int Col>
     class Mat;
 
     template <typename T, int Col>
     class Vec
     {
-    private:
     public:
-        T data[Col]{};
-
+        T data[MAX_RC<Col, 4>]{};
         Vec() = default;
-        // Vec(const Vec<T, Col>& other) = default;
-        //
-        // Vec<T, Col>& operator =(const Vec<T, Col>& other) = default;
-        //
-        // Vec<T, Col>& operator =(const Vec<T, Col>&& other)
-        // {
-        //     for (int i = 0; i < Col; ++i)
-        //     {
-        //         data[i] = other.data[i];
-        //     }
-        //     return *this;
-        // }
-        //
-        // Vec(Vec<T, Col>&& other) noexcept
-        // {
-        //     for (int i = 0; i < Col; ++i)
-        //     {
-        //         data[i] = other.data[i];
-        //     }
-        // }
 
         explicit Vec(T flatv)
         {
@@ -354,11 +354,28 @@ namespace L_MATH
             }
         }
 
-
-
-        Vec(std::initializer_list<T> list)
+        template<int COL2>
+        explicit operator L_MATH::Vec<T, COL2>&()
         {
-            if (list.size() != Col) return;
+            if constexpr (Col > 4 || COL2 > 4)
+            {
+                throw std::runtime_error("L_MATH::Vec constructor called with invalid arguments");
+            }
+            return reinterpret_cast<L_MATH::Vec<T, COL2>&>(*this);
+        }
+
+        template<int COL2>
+        explicit operator const L_MATH::Vec<T, COL2>&()
+        {
+            if constexpr (Col > 4 || COL2 > 4)
+            {
+                throw std::runtime_error("L_MATH::Vec constructor called with invalid arguments");
+            }
+            return reinterpret_cast<const L_MATH::Vec<T, COL2>&>(*this);
+        }
+
+        Vec(const std::initializer_list<T>& list)
+        {
             if constexpr (Col == 3)
             {
                 data[0] = list.begin()[0];
@@ -372,31 +389,19 @@ namespace L_MATH
             }
         }
 
-        explicit Vec(Vec<T, Col - 1> vec1, T t)
-        {
-            for (int i = 0; i < Col - 1; ++i)
-            {
-                data[i] = vec1[i];
-            }
-            data[Col - 1] = t;
-        }
+        template<int Row>
+        Vec<T,Row> operator*(const Mat<T, Col, Row>& mat) const;
+
+        template<int Row>
+        Vec<T,Row> mul_transpose(const Mat<T, Row, Col>& mat) const;
 
 
-        template <int C>
-        explicit Vec(const Vec<T, C>& src)
-        {
-            int i = 0;
-            for (i = 0; i < Col && i < C; ++i)
-            {
-                data[i] = src[i];
-            }
-            for (; i < Col; ++i)
-            {
-                data[i] = 0;
-            }
-        }
+        template<int Row>
+        explicit Vec(const Mat<T, Row, 1>& mat);
 
-        explicit Vec(const Mat<T, Col, 1>& mat);
+        template<int Row>
+        explicit Vec(const Vec<T, Row>& vec);
+
         const static Vec<T, Col> ZERO;
         const static Vec<T, Col> ONE;
 
@@ -410,19 +415,8 @@ namespace L_MATH
             return data[index];
         }
 
-        template <int C>
-        Mat<T, 1, C> operator*(const Mat<T, Col, C>& other) const
-        {
-            Mat<T, 1, C> result;
-            for (int i = 0; i < C; ++i)
-            {
-                for (int j = 0; j < Col; ++j)
-                {
-                    result[0][i] += data[j] * other[j][i];
-                }
-            }
-            return result;
-        }
+
+
 
         T dot(const Vec<T, Col>& other) const;
         T magnitude() const;
@@ -445,8 +439,7 @@ namespace L_MATH
     template <typename T, int Row, int Col>
     class Mat
     {
-        using Mat_T_Row_Col = Mat<T, Row, Col>;
-        Vec<T, Row> data[Col]{};
+        Vec<T, MIN_RC<Row, 4>> data[MIN_RC<Col, 4>]{};
 
         void clear(T t)
         {
@@ -526,6 +519,26 @@ namespace L_MATH
             }
         }
 
+        template<int ROW2,int COL2>
+        explicit operator L_MATH::Mat<T, ROW2, COL2>&()
+        {
+            if constexpr (ROW2 > 4 || COL2 > 4 || Row > 4 || Col > 4)
+            {
+                throw std::runtime_error("L_MATH::Mat constructor called with invalid arguments");
+            }
+            return reinterpret_cast<L_MATH::Mat<T, ROW2, COL2>&>(*this);
+        }
+
+        template<int ROW2,int COL2>
+        explicit operator const L_MATH::Mat<T, ROW2, COL2>&()
+        {
+            if constexpr (ROW2 > 4 || COL2 > 4 || Row > 4 || Col > 4)
+            {
+                throw std::runtime_error("L_MATH::Mat constructor called with invalid arguments");
+            }
+            return reinterpret_cast<const L_MATH::Mat<T, ROW2, COL2>&>(*this);
+        }
+
 
         static Mat<T, Row, Col> dialog()
         {
@@ -584,7 +597,7 @@ namespace L_MATH
 
         Mat<T, Row, 1> operator *(const Vec<T, Col>& other) const
         {
-            Mat<T, Row, 1> result(0);
+            Mat<T, Row, 1> result(0.f);
             for (int i = 0; i < Row; ++i)
             {
                 for (int k = 0; k < Col; ++k)
@@ -602,6 +615,8 @@ namespace L_MATH
         DECLARE_MAT_OPT_SINGLE(*, Row, Col)
         DECLARE_MAT_OPT_SINGLE(/, Row, Col)
     };
+
+
 
 
     inline Vec<float, 3> FORWARD({0, 0, 1});
@@ -718,13 +733,64 @@ namespace L_MATH
 
 
     template <typename T, int Col>
-    Vec<T, Col>::Vec(const L_MATH::Mat<T, Col, 1>& mat)
+    template <int Row>
+    Vec<T, Row> Vec<T, Col>::operator*(const Mat<T, Col, Row>& mat) const
     {
-        for (int i = 0; i < Col; ++i)
+        Vec<T, Row> result;
+        for (int i = 0; i < Row; ++i)
+        {
+            for (int k = 0; k < Col; ++k)
+            {
+                result.data[i] += data[k] * mat[i][k];
+            }
+        }
+        return result;
+    }
+
+    template <typename T, int Col>
+    template <int Row>
+    Vec<T, Row> Vec<T, Col>::mul_transpose(const Mat<T, Row, Col>& mat) const
+    {
+        Vec<T, Row> result;
+        for (int i = 0; i < Row; ++i)
+        {
+            for (int k = 0; k < Col; ++k)
+            {
+                result.data[i] += data[k] * mat[k][i];
+            }
+        }
+        return result;
+    }
+
+
+    template <typename T, int Col>
+    template <int Row>
+    Vec<T, Col>::Vec(const Mat<T, Row, 1>& mat)
+    {
+        for (int i = 0; i < MIN_RC<Row, Col>; ++i)
         {
             data[i] = mat[0][i];
         }
+        for (int i = MIN_RC<Row, Col>; i < Col; ++i)
+        {
+            data[i] = 0;
+        }
     }
+
+    template <typename T, int Col>
+    template <int Row>
+    Vec<T, Col>::Vec(const Vec<T, Row>& vec)
+    {
+        for (int i = 0; i < MIN_RC<Row, Col>; ++i)
+        {
+            data[i] = vec[i];
+        }
+        for (int i = MIN_RC<Row, Col>; i < Col; ++i)
+        {
+            data[i] = 0;
+        }
+    }
+
 
     template <typename T, int Col>
     T Vec<T, Col>::dot(const Vec<T, Col>& other) const
@@ -870,9 +936,10 @@ namespace L_MATH
         return mat_44.transpose();
     }
 
-    inline Mat<float, 4, 4> scale(const Vec3& scale)
+    inline Mat<float, 4, 4> scale(const Vec3& __scale)
     {
-        auto mat = Mat<float, 4, 4>::IDENTITY * Mat<float, 4, 4>(Vec4(scale, 1));
+        const Vec4& _scale = (const Vec4&)__scale;
+        auto mat = Mat<float, 4, 4>::IDENTITY * Mat<float, 4, 4>(_scale);
         mat[3][3] = 1;
         return mat;
     }
@@ -1022,7 +1089,6 @@ namespace L_MATH
         M_inv[1][1] = (sin_alpha * sin_beta * sin_gamma + cos_alpha * cos_gamma) * inv_sy;
         M_inv[2][1] = sin_alpha * cos_beta * inv_sy;
         M_inv[3][1] = 0.0f;
-
         M_inv[0][2] = (cos_alpha * sin_beta * cos_gamma + sin_alpha * sin_gamma) * inv_sz;
         M_inv[1][2] = (cos_alpha * sin_beta * sin_gamma - sin_alpha * cos_gamma) * inv_sz;
         M_inv[2][2] = cos_alpha * cos_beta * inv_sz;
