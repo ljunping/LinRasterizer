@@ -24,9 +24,14 @@ void Transform::on_delete()
 
 Transform::~Transform()
 {
+
     for (auto child : children)
     {
         DESTROY_OBJECT(child);
+    }
+    for (auto component : components)
+    {
+        DESTROY_OBJECT(component);
     }
 }
 

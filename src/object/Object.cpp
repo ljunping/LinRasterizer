@@ -72,7 +72,7 @@ Object* TypeFactory::create_type_inst_by_id(int type_id)
 
 Object* TypeFactory::get_type_inst_by_inst_id(int inst_id)
 {
-    auto it = objet_inst_map.find(inst_id);
+    const auto it = objet_inst_map.find(inst_id);
     return (it != objet_inst_map.end()) ? it->second : nullptr;
 }
 

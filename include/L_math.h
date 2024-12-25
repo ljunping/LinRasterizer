@@ -415,9 +415,6 @@ namespace L_MATH
             return data[index];
         }
 
-
-
-
         T dot(const Vec<T, Col>& other) const;
         T magnitude() const;
         T sqrt_magnitude() const;
