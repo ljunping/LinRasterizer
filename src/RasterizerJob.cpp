@@ -9,8 +9,9 @@
 #include "WindowHandle.h"
 #include "TrianglePrimitive.h"
 #include"Context.h"
+#include "DrawCallContext.h"
 #include "Mesh.h"
-#include "MeshRender.h"
+#include "VertShader.h"
 
 Vec2 MSAA_TEMPLATE_1[1] = {{0, 0}};
 Vec2 MSAA_TEMPLATE_2[2]={{-0.25, -0.25},{0.25, 0.25}};
@@ -38,38 +39,42 @@ Vec2 edge_msaa_template(int factor,int index)
 
 void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end,  void* global_data)
 {
-    Context* ctx = (Context*)global_data;
+    auto& draw_call_context_tuple = *(std::tuple<DrawCallContext*, int>*)global_data;
+
+    DrawCallContext* draw_call = std::get<0>(draw_call_context_tuple);
+    int msaa_index = std::get<1>(draw_call_context_tuple);
     int w, h;
-    ctx->get_screen_size(w, h);
-    auto current_render_pass = ctx->current_render_pass();
+    auto ctx = draw_call->ctx;
+    draw_call->ctx->get_screen_size(w, h);
     RayCasterResult result;
     for (int idx = data_begin; idx < data_end; idx++)
     {
         int i = idx / w, j = idx % w;
         float y,x;
-        invert_view_transform(w, h, j, i, x, y);
+        invert_view_transform(draw_call, msaa_index, w, h, j, i, x, y);
         if (ctx->setting.build_bvh)
         {
-            if (!ray_caster_bvh(current_render_pass->pass_node.camera, current_render_pass->bvh_tree, x, y, &result))
+            if (!ray_caster_bvh(draw_call->camera, draw_call->bvh_tree, x, y, &result))
             {
                 continue;
             }
         }else
         {
-            if (!ray_caster(ctx, x, y, &result))
+            if (!ray_caster(draw_call, x, y, &result))
             {
                 continue;
             }
         }
 
-        add_fragment(*result.triangle,ctx, result.alpha, i, j);
+        add_fragment(*result.triangle, draw_call, msaa_index, result.alpha, i, j);
     }
 
 }
 
 void ray_cast_frag_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-
+    auto draw_call_context_tuple = (std::tuple<DrawCallContext*, int>*)global_data;
+    delete draw_call_context_tuple;
 }
 
 void clear_context_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
@@ -86,42 +91,48 @@ void clear_context_execute(std::size_t data_begin, std::size_t data_end, void* g
 
 void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    Context* ctx = (Context*)global_data;
+    auto& tuple = *(std::tuple<Context*, Camera*>*)global_data;
+    auto ctx = std::get<0>(tuple);
     int w, h;
     ctx->get_screen_size(w, h);
-    auto current_render_pass = ctx->current_render_pass();
-    auto& pass_node = current_render_pass->pass_node;
-    auto background_color = pass_node.camera->background_color;
-    Color* frame_buff = ctx->get_frame_buffer(pass_node.frame_buff_index);
+    auto camera = std::get<1>(tuple);
+    auto background_color = camera->background_color;
+    auto frame_buff = ctx->get_frame_buffer(0);
     for (int idx = data_begin; idx < data_end; idx++)
     {
-        if (pass_node.camera->solid_color)
+        if (camera->solid_color)
         {
             frame_buff[idx] = background_color;
         }
         for (int i = 0; i < ctx->setting.msaa_factor; ++i)
         {
-            pass_node.camera->depth_buff[idx + i * w * h] = 1.f;
-            pass_node.camera->fragment_map[idx + i * w * h].triangle = nullptr;
-            pass_node.camera->fragment_map[idx + i * w * h].draw_call = nullptr;
+            auto& fragment = camera->fragment_map[idx + i * w * h];
+            camera->depth_buff[idx + i * w * h] = 1.f;
+            fragment.triangle = nullptr;
+            fragment.triangle = nullptr;
+            fragment.draw_call = nullptr;
+            if (!fragment.build_interpolation_data)
+            {
+                new(&fragment.interpolation_data) VertexInterpolation();
+                fragment.build_interpolation_data = true;
+            }
         }
     }
 }
 
-void clear_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
+void clear_camera_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-
+    auto tuple = (std::tuple<Context*, Camera*>*)global_data;
+    delete tuple;
 }
-
 void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-
-    FragShader* frag_shader = (FragShader*)global_data;
-    auto ctx = frag_shader->draw_call->ctx;
-    auto draw_call = frag_shader->draw_call;
+    DrawCallContext* draw_call = (DrawCallContext*)global_data;
     int w, h;
-    frag_shader->draw_call->ctx->get_screen_size(w, h);
-    Color* frame_buff = frag_shader->draw_call->frame_buff;
+    auto ctx = draw_call->ctx;
+    auto frag_shader = draw_call->frag_shader;
+    Color* frame_buff = draw_call->frame_buff;
+    ctx->get_screen_size(w, h);
     for (int idx = data_begin; idx < data_end; ++idx)
     {
         Vec4 frag_color;
@@ -132,7 +143,7 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
         bool is_run_frag = false;
         for (int f = 0; f < ctx->setting.msaa_factor; ++f)
         {
-            auto& fragment = (*frag_shader->fragment_map)[idx + f * w * h];
+            auto& fragment = (draw_call->camera->fragment_map)[idx + f * w * h];
             if (fragment.draw_call != draw_call)
             {
                 continue;
@@ -173,43 +184,60 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
         }
     }
 }
-
-void prepare_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
+void interpolation_frag_output_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    Context* context = (Context*)global_data;
+    DrawCallContext* draw_call = (DrawCallContext*)global_data;
     int w, h;
-    context->get_screen_size(w, h);
-    auto current_render_pass = context->current_render_pass();
-    auto& pass_node = current_render_pass->pass_node;
+    draw_call->ctx->get_screen_size(w, h);
     for (int idx = data_begin; idx < data_end; ++idx)
     {
-
-        for (int i = 0; i < context->setting.msaa_factor; ++i)
+        for (int i = 0; i < draw_call->ctx->setting.msaa_factor; ++i)
         {
-            auto fragment = &pass_node.camera->fragment_map[idx + i * w * h];
+            auto fragment = &draw_call->camera->fragment_map[idx + i * w * h];
             auto tri = fragment->triangle;
-            if (!tri||(fragment->draw_call != current_render_pass))
+            if (!tri || (fragment->draw_call != draw_call))
             {
                 continue;
             }
-            tri->vert[0].attributes->create_vert_attribute(tri->vert[0], tri->vert[1], tri->vert[2],
-                                                           fragment->alpha,
-                                                           fragment->vertex_attribute);
+            draw_call->create_vert_attribute(tri->mesh, tri->vert_index[0], tri->vert_index[1], tri->vert_index[2],
+                                             fragment->alpha,
+                                             fragment->interpolation_data);
         }
+    }
+}
+
+void clear_vert_output_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
+{
+    DrawCallContext* draw_call = (DrawCallContext*)global_data;
+    for (int idx = data_begin; idx < data_end; ++idx)
+    {
+        draw_call->outputs[idx].tbn_light_dirs.~vector();
+        draw_call->outputs[idx].view_light_dirs.~vector();
     }
 }
 
 
 void run_frag_shader_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
+    DrawCallContext* draw_call = (DrawCallContext*)global_data;
+    draw_call->frag_shader->end_draw_call(draw_call);
+}
 
+void run_vert_shader_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
+{
+    auto draw_call_context = (DrawCallContext*)global_data;
+    for (int i = data_begin; i < data_end; ++i)
+    {
+        draw_call_context->vert_shader->run(draw_call_context, i);
+    }
 }
 
 void rast_tri_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    auto ctx = (Context*)global_data;
-    auto current_render_pass = ctx->current_render_pass();
-    auto& triangle_primitives = current_render_pass->primitives;
+    auto& draw_call_context_tuple = *(std::tuple<DrawCallContext*, int>*)global_data;
+    auto draw_call_context = std::get<0>(draw_call_context_tuple);
+    auto msaa_index = std::get<1>(draw_call_context_tuple);
+    auto& triangle_primitives = draw_call_context->primitives;
     for (int i = data_begin; i < data_end; ++i)
     {
         auto& triangle_primitive = *triangle_primitives[i];
@@ -217,17 +245,14 @@ void rast_tri_execute(std::size_t data_begin,std::size_t data_end, void* global_
         {
             continue;
         }
-
-        for (int j = 0; j < ctx->setting.msaa_factor; ++j)
-        {
-            rast_tri(triangle_primitive, ctx);
-        }
+        rast_tri(triangle_primitive, draw_call_context,msaa_index);
     }
 }
 
 void rast_tri_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-
+    auto draw_call_context_tuple = (std::tuple<DrawCallContext*, int>*)global_data;
+    delete draw_call_context_tuple;
 }
 
 void mid_filter_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
@@ -239,43 +264,29 @@ void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* glob
 {
 }
 
-void execute_mvp(std::size_t data_begin,std::size_t data_end, void* global_data)
+void run_process_primitive(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    static std::mutex mutex;
-    auto* data = (std::tuple<DrawCallData*,Mat44>*)global_data;
-    Mat44 &mvp = std::get<1>(*data);
-    auto render_pass = std::get<0>(*data);
-    auto get_model_tri = [render_pass](int index, TrianglePrimitive& tri)
+    DrawCallContext* draw_call = (DrawCallContext*)global_data;
+    auto get_model_tri = [&draw_call](int index, TrianglePrimitive& tri)
     {
-        for (int i = 0; i < render_pass->meshes.size(); ++i)
+        for (int i = 0; i < draw_call->meshes.size(); ++i)
         {
-            Mesh& mesh = *Resource::get_resource<Mesh>(render_pass->meshes[i].first);
+            Mesh& mesh = *draw_call->meshes[i].first;
             if (index < mesh.tri_count())
             {
-                mesh.generate_triangle(tri, index);
+                mesh.generate_triangle_index(tri, index);
                 break;
             }
-
             index -= mesh.tri_count();
         }
     };
 
-
     for (int i = data_begin; i < data_end; ++i)
     {
-        render_pass->primitives[i] = render_pass->tri_pool + i;
-        auto& triangle_primitive = *render_pass->primitives[i];
+        draw_call->primitives[i] = draw_call->tri_pool + i;
+        auto& triangle_primitive = *draw_call->primitives[i];
         get_model_tri(i, triangle_primitive);
-        triangle_primitive.discard = false;
-        triangle_primitive.update(mvp);
-        // if (triangle_primitives[i].area() > HUGE_TRIANGLE_THR && HUB_TRIANGLE_BREAK_COUNT_MAX > 0)
-        // {
-        //     std::lock_guard<std::mutex> lock(mutex);
-        //     int break_count = HUB_TRIANGLE_BREAK_COUNT_MAX;
-        //     std::vector<TrianglePrimitive> result;
-        //     break_huge_triangle(triangle_primitives[i], HUGE_TRIANGLE_THR, result, break_count);
-        //     triangle_primitives.insert(triangle_primitives.end(), result.begin(), result.end());
-        // }
+        draw_call->generate_triangle_primitive(triangle_primitive);
     }
 }
 
@@ -338,6 +349,7 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
         }
     }
     _Attributes->ebo = std::move(eb0);
+    _Attributes->calculate_tangents();
     return _Attributes;
 }
 
@@ -359,6 +371,7 @@ Mesh* generate_quad()
     _Attributes->bind_attribute(NORMAL,3, 3, 8);
     _Attributes->bind_attribute(UV, 2, 6, 8);
     _Attributes->ebo = {0, 1, 2, 1, 3, 2};
+    _Attributes->calculate_tangents();
     return _Attributes;
 }
 
@@ -378,6 +391,7 @@ Mesh* generate_tri()
     _Attributes->bind_attribute(NORMAL,3, 3, 8);
     _Attributes->bind_attribute(UV, 2, 6, 8);
     _Attributes->ebo = {0, 1, 2};
+    _Attributes->calculate_tangents();
     return _Attributes;
 }
 
@@ -398,22 +412,20 @@ void draw_line(Context* ctx, Color* buff, void* data)
     }
 }
 
-void complete_mvp_break_huge_triangle(std::size_t data_begin,std::size_t data_end, void* global_data)
-{
 
-}
 
-void view_transform(int w, int h, float st_x, float st_y, int& i, int& j)
+void view_transform(DrawCallContext* draw_call_context, int msaa_index, int w, int h, float st_x, float st_y, int& i,
+                    int& j)
 {
-    auto ctx = get_current_ctx();
     Vec2 offset;
+    Context* ctx = draw_call_context->ctx;
     if (ctx->setting.enable_edge)
     {
-        offset = edge_msaa_template(ctx->setting.msaa_factor, ctx->current_mesa_index());
+        offset = edge_msaa_template(ctx->setting.msaa_factor, msaa_index);
     }
     else
     {
-        offset = msaa_template(ctx->setting.msaa_factor, ctx->current_mesa_index());
+        offset = msaa_template(ctx->setting.msaa_factor, msaa_index);
     }
 
     float inv_w_minus_1 = 2.0f / (w - 1);
@@ -430,90 +442,91 @@ void view_transform(int w, int h, float st_x, float st_y, int& i, int& j)
 }
 
 
-void invert_view_transform(int w, int h, int i, int j, float& st_x, float& st_y)
+void invert_view_transform(DrawCallContext* call_context,int msaa_index,int w, int h, int i, int j, float& st_x, float& st_y)
 {
-    auto ctx = get_current_ctx();
     Vec2 offset;
+    Context* ctx = call_context->ctx;
     if(ctx->setting.enable_edge)
     {
-        offset = edge_msaa_template(ctx->setting.msaa_factor, ctx->current_mesa_index());
+        offset = edge_msaa_template(ctx->setting.msaa_factor, msaa_index);
     }else
     {
-        offset = msaa_template(ctx->setting.msaa_factor, ctx->current_mesa_index());
+        offset = msaa_template(ctx->setting.msaa_factor, msaa_index);
     }
     st_x = (i * 2 - (w - 1)) * 1.0 / (w - 1) + offset[0] * 2 / (w - 1);
     st_y = (j * 2 - (h - 1)) * 1.0 / (h - 1) + offset[1] * 2 / (h - 1);
 }
+//
+// void vert_view_transform(DrawCallContext* draw_call_context,const L_MATH::Mat<float, 4, 4>& mvp, const int w, const int h,
+//                          VertexInterpolation* vertex_attribute, L_MATH::Vec<float, 3>& alpha_, int& i, int& j)
+// {
+//     int xy[6];
+//     Vec3 alpha = vertex_attribute[0].alpha * alpha_[0] + vertex_attribute[1].alpha * alpha_[1] + vertex_attribute[2].
+//         alpha * alpha_[2];
+//     Vec3 result;
+//     Vec4& result4 = static_cast<L_MATH::Vec<float, 4>&>(result);
+//     result4[3] = 1;
+//     auto attributes = vertex_attribute->mesh_ptr;
+//     //每个三角形的三个顶点的vertex_attribute.v是一致的
+//     for (int k = 0; k < 3; ++k)
+//     {
+//         attributes->get_attribute_value(vertex_attribute->v[k], 0, result);
+//         result4 = result4 * mvp;
+//         result4 /= result4[3];
+//         view_transform(draw_call_context,w, h, result4[0], result4[1], xy[k * 2], xy[k * 2 + 1]);
+//     }
+//     i = static_cast<int>(xy[0] * alpha[0] + xy[2] * alpha[1] + xy[4] * alpha[2]);
+//     j = static_cast<int>(xy[1] * alpha[0] + xy[3] * alpha[1] + xy[5] * alpha[2]);
+// }
 
-void vert_view_transform(const L_MATH::Mat<float, 4, 4>& mvp, const int w, const int h,
-                         VertexAttribute* vertex_attribute, L_MATH::Vec<float, 3>& alpha_, int& i, int& j)
+bool add_fragment(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_index,const L_MATH::Vec<float, 3>& alpha, int i, int j)
 {
-    int xy[6];
-    Vec3 alpha = vertex_attribute[0].alpha * alpha_[0] + vertex_attribute[1].alpha * alpha_[1] + vertex_attribute[2].
-        alpha * alpha_[2];
-    Vec3 result;
-    Vec4& result4 = static_cast<L_MATH::Vec<float, 4>&>(result);
-    result4[3] = 1;
-    auto attributes = vertex_attribute->attributes;
-    //每个三角形的三个顶点的vertex_attribute.v是一致的
-    for (int k = 0; k < 3; ++k)
-    {
-        attributes->get_attribute_value(vertex_attribute->v[k], 0, result);
-        result4 = result4 * mvp;
-        result4 /= result4[3];
-        view_transform(w, h, result4[0], result4[1], xy[k * 2], xy[k * 2 + 1]);
-    }
-    i = static_cast<int>(xy[0] * alpha[0] + xy[2] * alpha[1] + xy[4] * alpha[2]);
-    j = static_cast<int>(xy[1] * alpha[0] + xy[3] * alpha[1] + xy[5] * alpha[2]);
-}
-
-bool add_fragment(TrianglePrimitive& tri, Context* ctx,const L_MATH::Vec<float, 3>& alpha, int i, int j)
-{
-
     int w, h;
-    ctx->get_screen_size(w, h);
+    draw_call->ctx->get_screen_size(w, h);
     auto _index = i * w + j;
     if (_index < 0 || _index >= w * h)
     {
         return false;
     }
-    int index = _index + w * h * ctx->current_mesa_index();
+    int index = _index + w * h * msaa_index;
 
-    auto current_render_pass = ctx->current_render_pass();
-    auto& pass_node = current_render_pass->pass_node;
-    auto& fragment = pass_node.camera->fragment_map[index];
-    if (ctx->setting.enable_depth)
+    auto& fragment = draw_call->camera->fragment_map[index];
+    if (draw_call->ctx->setting.enable_depth)
     {
         auto st_z = tri.v[0][2] * alpha[0] + tri.v[1][2] * alpha[1] + tri.v[2][2] * alpha[2];
 
-        auto depth = pass_node.camera->depth_buff[index];
-        if (depth < st_z||(L_MATH::is_zero(depth - st_z)))
+        auto depth = draw_call->camera->depth_buff[index];
+        if (depth < st_z || (L_MATH::is_zero(depth - st_z)))
         {
             return false;
         }
-        if (ctx->setting.enable_depth_write)
+        if (draw_call->ctx->setting.enable_depth_write)
         {
-            pass_node.camera->depth_buff[index] = st_z;
+            draw_call->camera->depth_buff[index] = st_z;
         }
     }
     auto alpha_inv_w = 1 / L_MATH::dot(alpha, tri.inv_w);
+
+    if (isnan(tri.inv_w[0]) || isnan(tri.inv_w[1])|| isnan(tri.inv_w[2]))
+    {
+        DEBUG_VAR
+    }
     auto real_z = -1 * alpha_inv_w;
     fragment.triangle = &tri;
     fragment.frag_coord = Vec3{(float)j, (float)i, real_z};
     fragment.alpha =  alpha * tri.inv_w * alpha_inv_w;
     fragment.resolution[0] = w;
-    fragment.draw_call = current_render_pass;
+    fragment.draw_call = draw_call;
     fragment.resolution[1] = h;
     return true;
 }
 
-bool ray_caster(Context* ctx, float si, float sj, RayCasterResult* result)
+bool ray_caster(DrawCallContext* draw_call, float si, float sj, RayCasterResult* result)
 {
-    auto current_render_pass = ctx->current_render_pass();
     Vec3 sv = Vec3({si, sj, -1});
     float min_z = 1;
     bool _is_ray_caster = false;
-    auto& proj_triangle_list = current_render_pass->primitives;
+    auto& proj_triangle_list = draw_call->primitives;
     L_MATH::Vec<float, 3> alpha;
     for (int i = 0; i < proj_triangle_list.size(); ++i)
     {
@@ -620,10 +633,10 @@ void rast_huge_tri(TrianglePrimitive& tri, Context* ctx)
 
 }
 
-void rast_tri(TrianglePrimitive& tri, Context* ctx)
+void rast_tri(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_index)
 {
-
     int w,h;
+    auto ctx = draw_call->ctx;
     ctx->get_screen_size(w, h);
     tri.clip();
     auto vert_count = tri.clip_vert_count;
@@ -633,22 +646,11 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
     {
         return;
     }
-
     auto clip_vertices_int = new int[vert_count][2];
     for (int i = 0; i < vert_count; ++i)
     {
-        if (HUB_TRIANGLE_BREAK_COUNT_MAX == 0)
-        {
-            view_transform(w, h, clip_vertices[i][0], clip_vertices[i][1], clip_vertices_int[i][0],
+            view_transform(draw_call,msaa_index, w, h, clip_vertices[i][0], clip_vertices[i][1], clip_vertices_int[i][0],
                            clip_vertices_int[i][1]);
-        }
-        else
-        {
-            // vert_view_transform(ctx->main_camera->view_mat, w, h, tri.vert, alpha_array[i], clip_vertices_int[i][0],
-            //                     clip_vertices_int[i][1]);
-        }
-
-
     }
     int l_line = 0;
     int l_y = clip_vertices_int[0][1],
@@ -704,18 +706,18 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
         if (next_left)
         {
             l_bresenham_line.next_point(lx, ly, lmx, lmy);
-            invert_view_transform(w, h, lx, ly, st_l[0], st_l[1]);
+            invert_view_transform(draw_call,msaa_index,w, h, lx, ly, st_l[0], st_l[1]);
             tri.barycentric(st_l, l_alpha);
-            add_fragment(tri, ctx, l_alpha, ly, lx);
+            add_fragment(tri, draw_call,msaa_index, l_alpha, ly, lx);
 
         }
 
         if (next_right)
         {
             r_bresenham_line.next_point(rx, ry, rmx, rmy);
-            invert_view_transform(w, h, rx, ry, st_r[0], st_r[1]);
+            invert_view_transform(draw_call,msaa_index, w, h, rx, ry, st_r[0], st_r[1]);
             tri.barycentric(st_r, r_alpha);
-            add_fragment(tri, ctx, r_alpha, ry, rx);
+            add_fragment(tri, draw_call, msaa_index,r_alpha, ry, rx);
         }
         next_right = false;
         next_left = false;
@@ -732,7 +734,7 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
             for (int i = lx + step; i != rx; i += step)
             {
                 t = (i - lx) * 1.0 / (rx - lx);
-                add_fragment(tri, ctx, l_alpha * (1 - t) + r_alpha * t, ry, i);
+                add_fragment(tri, draw_call, msaa_index, l_alpha * (1 - t) + r_alpha * t, ry, i);
             }
         }
         else if (ly < ry)
@@ -747,50 +749,50 @@ void rast_tri(TrianglePrimitive& tri, Context* ctx)
     delete[] clip_vertices_int;
 }
 // 第一次调用必须tri.area() > area_thr && count > 0为true
-void break_huge_triangle(TrianglePrimitive& tri, float area_thr, std::vector<TrianglePrimitive>& result,
-                         int& count)
-{
-    if (tri.area() > area_thr && count > 0)
-    {
-        tri.discard = true;
-        --count;
-        Vec3 alphas[6];
-        int vert_index[12] = {0, 1, 5, 1, 2, 3, 1, 3, 5, 5, 3, 4};
-        alphas[0] = Vec3{1, 0, 0};
-        alphas[1] = Vec3{0.5, 0.5, 0};
-        alphas[2] = Vec3{0, 1, 0};
-        alphas[3] = Vec3{0, 0.5, 0.5};
-        alphas[4] = Vec3{0, 0, 1};
-        alphas[5] = Vec3{0.5, 0, 0.5};
-        for (int i = 0; i < 12; i = i + 3)
-        {
-            Vec3 alpha0 = alphas[vert_index[i]];
-            Vec3 alpha1 = alphas[vert_index[i + 1]];
-            Vec3 alpha2 = alphas[vert_index[i + 2]];
-            auto tri_result = Pool<TrianglePrimitive>::POOL.create();
-
-            tri_result->v[0] = tri.v[0] * alpha0[0] + tri.v[1] * alpha0[1] + tri.v[2] * alpha0[2];
-            tri_result->v[1] = tri.v[0] * alpha1[0] + tri.v[1] * alpha1[1] + tri.v[2] * alpha1[2];
-            tri_result->v[2] = tri.v[0] * alpha2[0] + tri.v[1] * alpha2[1] + tri.v[2] * alpha2[2];
-            tri_result->inv_w = Vec3::ONE;
-            tri_result->id = tri.id;
-            auto attributes = tri.vert[0].attributes;
-
-            attributes->create_vert_attribute(tri.vert[0], tri.vert[1], tri.vert[2], alpha0, tri_result->vert[0]);
-
-            attributes->create_vert_attribute(tri.vert[0], tri.vert[1], tri.vert[2], alpha1, tri_result->vert[1]);
-
-            attributes->create_vert_attribute(tri.vert[0], tri.vert[1], tri.vert[2], alpha2, tri_result->vert[2]);
-            tri_result->update_param();
-            break_huge_triangle(*tri_result, area_thr, result, count);
-        }
-    }
-    else
-    {
-        result.emplace_back(tri);
-        Pool<TrianglePrimitive>::POOL.recycle(&tri);
-    }
-}
+// void break_huge_triangle(TrianglePrimitive& tri, float area_thr, std::vector<TrianglePrimitive>& result,
+//                          int& count)
+// {
+//     if (tri.area() > area_thr && count > 0)
+//     {
+//         tri.discard = true;
+//         --count;
+//         Vec3 alphas[6];
+//         int vert_index[12] = {0, 1, 5, 1, 2, 3, 1, 3, 5, 5, 3, 4};
+//         alphas[0] = Vec3{1, 0, 0};
+//         alphas[1] = Vec3{0.5, 0.5, 0};
+//         alphas[2] = Vec3{0, 1, 0};
+//         alphas[3] = Vec3{0, 0.5, 0.5};
+//         alphas[4] = Vec3{0, 0, 1};
+//         alphas[5] = Vec3{0.5, 0, 0.5};
+//         for (int i = 0; i < 12; i = i + 3)
+//         {
+//             Vec3 alpha0 = alphas[vert_index[i]];
+//             Vec3 alpha1 = alphas[vert_index[i + 1]];
+//             Vec3 alpha2 = alphas[vert_index[i + 2]];
+//             auto tri_result = Pool<TrianglePrimitive>::POOL.create();
+//
+//             tri_result->v[0] = tri.v[0] * alpha0[0] + tri.v[1] * alpha0[1] + tri.v[2] * alpha0[2];
+//             tri_result->v[1] = tri.v[0] * alpha1[0] + tri.v[1] * alpha1[1] + tri.v[2] * alpha1[2];
+//             tri_result->v[2] = tri.v[0] * alpha2[0] + tri.v[1] * alpha2[1] + tri.v[2] * alpha2[2];
+//             tri_result->inv_w = Vec3::ONE;
+//             tri_result->id = tri.id;
+//             auto attributes = tri.vert[0].attributes;
+//
+//             attributes->create_vert_attribute(tri.vert[0], tri.vert[1], tri.vert[2], alpha0, tri_result->vert[0]);
+//
+//             attributes->create_vert_attribute(tri.vert[0], tri.vert[1], tri.vert[2], alpha1, tri_result->vert[1]);
+//
+//             attributes->create_vert_attribute(tri.vert[0], tri.vert[1], tri.vert[2], alpha2, tri_result->vert[2]);
+//             tri_result->update_param();
+//             break_huge_triangle(*tri_result, area_thr, result, count);
+//         }
+//     }
+//     else
+//     {
+//         result.emplace_back(tri);
+//         Pool<TrianglePrimitive>::POOL.recycle(&tri);
+//     }
+// }
 
 
 

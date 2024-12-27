@@ -10,6 +10,7 @@
 #include "RasterizerJob.h"
 #include "Transform.h"
 #include "Texture.h"
+#include "VertShader.h"
 using namespace L_MATH;
 static int layer = 1;
 int next_layer()
@@ -17,7 +18,7 @@ int next_layer()
     return 1 << (layer++);
 }
 
-MeshRender* add_mesh_render(Transform* node, FragShader* frag_shader, Material* material,
+MeshRender* add_mesh_render(Transform* node,VertShader* vert_shader, FragShader* frag_shader, Material* material,
                      Texture* texture,
                      int render_layer, bool transparent)
 {
@@ -28,6 +29,7 @@ MeshRender* add_mesh_render(Transform* node, FragShader* frag_shader, Material* 
     meshrender->render_layer = render_layer;
     meshrender->materials[0] = material->get_resource_id();
     meshrender->textures[0] = texture->get_resource_id();
+    meshrender->vert_shader = vert_shader->get_resource_id();
     return meshrender;
 }
 
@@ -80,21 +82,37 @@ int main()
     auto camera_node2 = CREATE_OBJECT_BY_TYPE(Transform);
     auto camera_2 = camera_node2->add_component<Camera>(0.1f, 1000.0f, 40, 640 * 1.0 / 480, true);
     camera_2->render_layer = 2;
-    auto _light_node = CREATE_OBJECT_BY_TYPE(Transform);
+    auto _light0_node = CREATE_OBJECT_BY_TYPE(Transform);
 
-    auto light = _light_node->add_component<Light>();
-    light->color = Vec3::ONE;
-    light->intensity = 1.0f;
-    light->scene_node->local_pos = {0, 0, 0};
+    auto light0 = _light0_node->add_component<Light>();
+    light0->color = {1, 1, 1};
+    light0->intensity = 20.0f;
+    light0->scene_node->local_pos = {-1,-1,1};
+
+    auto _light1_node = CREATE_OBJECT_BY_TYPE(Transform);
+
+    auto light1 = _light1_node->add_component<Light>();
+    light1->color = {1, 1, 1};
+    light1->intensity = 10.0f;
+    light1->scene_node->local_pos = {1, 1, 1};
+
     auto _text_frag_shader0 = Resource::get_or_create_resource<TextureFragShader>("TextureFragShader_Sphere.frag");
     auto _frag_shader0 = Resource::get_or_create_resource<FragShader>("FragShader_Sphere.frag");
     auto _lightFragShader0 = Resource::get_or_create_resource<LightFragShader>("LightFragShader.frag");
     auto _NormalTextureLightFragShader0 = Resource::get_or_create_resource<NormalTextureLightFragShader>(
         "NormalTextureLightFragShader.frag");
 
-    auto texture = Resource::create_resource<Texture>("cat-7737618_1280.jpg", "cat-7737618_1280.jpg", true);
-    auto normal_texture = Resource::create_resource<Texture>("noise.jpeg", "noise.jpeg", true);
-
+    auto vert_shader0 = Resource::get_or_create_resource<VertShader>("VertShader_Sphere.vert");
+    auto texture0 = Resource::create_resource<Texture>("cat-7737618_1280.jpg", "cat-7737618_1280.jpg", true);
+    texture0->linear = true;
+    auto texture1 = Resource::create_resource<Texture>("black_white_box.png", "black_white_box.png", true);
+    texture1->linear = true;
+    auto texture2 = Resource::create_resource<Texture>("colorful.png", "colorful.png", true);
+    texture2->linear = true;
+    auto normal_texture0 = Resource::create_resource<Texture>("normal_img.jpeg", "normal_img.jpeg", true);
+    normal_texture0->linear = true;
+    auto normal_texture1 = Resource::create_resource<Texture>("noise.jpeg", "noise.jpeg", true);
+    normal_texture1->linear = true;
     auto _material0 = Resource::create_resource<Material>("default.mat");
     _material0->set_Vec4_uniform(MATERIAL_COLOR1, {1, 0, 0, 0.5});
 
@@ -106,9 +124,9 @@ int main()
 
     auto _light_material = Resource::create_resource<Material>("light0.mat");
     _light_material->set_Vec4_uniform(MATERIAL_COLOR1, {1, 0, 0, 0.5});
-    _light_material->set_Vec3_uniform(MATERIAL_LIGHT_KD, {0.5, 0.2, 0.7});
+    _light_material->set_Vec3_uniform(MATERIAL_LIGHT_KD, {1, 1, 1});
     _light_material->set_Vec3_uniform(MATERIAL_LIGHT_KS, {0.7, 0.7, 0.7});
-
+    _light_material->set_float_uniform(MATERIAL_NORMAL_BUMP_FACTOR, 1.0f);
     // _pig
     auto _Pig = Resource::get_or_create_resource<Mesh>("pig/16433_Pig.obj", "pig/16433_Pig.obj");
     auto _pig_mesh_provider = create_mesh_provider(_Pig);
@@ -117,8 +135,7 @@ int main()
     //         0, -0.5, -1
     //     })  *
     //     rotate(LEFT, 270) * rotate(FORWARD, 90));
-
-    _pig_mesh_provider->local_scale={1,1,1};
+    _pig_mesh_provider->local_scale={1.5,1.5,1.5};
     _pig_mesh_provider->local_pos = {0, 0, -3};
     _pig_mesh_provider->local_euler_angles = {90, 90, 180};
     // _pig_mesh_provider->get_component<MeshProvider>()->locate_centroid(camera);
@@ -130,7 +147,7 @@ int main()
     //sphere
     auto sphere_node = create_mesh_provider(generate_sphere(0.5, 30, 30));
     sphere_node->local_pos = {0, 0, -2};
-    sphere_node->local_scale={0.5, 0.5, 0.5};
+    sphere_node->local_scale={1, 1, 1};
 
     //quad
     auto quad_node = create_mesh_provider(generate_quad());
@@ -160,9 +177,11 @@ int main()
     // add_mesh_render(tri_node, _lightFragShader0, _material0, texture, 1, false);
     // add_mesh_render(venti_node, _lightFragShader0, _material0, texture, 1, false);
 
-    auto _pig_mesh_provider_mesh_render = add_mesh_render(_pig_mesh_provider, _lightFragShader0, _light_material, texture, 1,
-                                       false);
-    _pig_mesh_provider_mesh_render->textures[1] = normal_texture->get_resource_id();
+    auto _pig_mesh_provider_mesh_render = add_mesh_render(_pig_mesh_provider, vert_shader0,
+                                                          _NormalTextureLightFragShader0, _light_material, texture2, 1,
+                                                          false);
+
+    _pig_mesh_provider_mesh_render->textures[1] = normal_texture0->get_resource_id();
     ctx->main_loop();
     return 0;
 }

@@ -24,7 +24,7 @@ public:
 
 class LightManager : public ObjectManger<Light>
 {
-
+public:
+    int get_light_count();
 };
-
 #endif //LIGHT_H

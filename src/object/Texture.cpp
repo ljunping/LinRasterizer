@@ -79,7 +79,6 @@ Texture::~Texture()
 }
 
 
-
 void Texture::texture_raw(int x, int y, const unsigned char *&result)
 {
     int index = std::max(std::min(y * width + x, width * height - 1), 0) * this->channels;
@@ -121,7 +120,22 @@ void Texture::texture_mipmap_magnify(int x, int y, int level, unsigned char *&re
     }
 }
 
-void Texture::texture_mipmap_minify(const L_MATH::Vec<float, 2> &uv, int level, unsigned char *&result)
+void Texture::texture_mipmap_minify(const L_MATH::Vec<float, 2> &uv, int level,  unsigned char *&result)
+{
+    level = std::min(level, (int)(mip_maps.size() - 1));
+    auto height = mip_maps[level].height;
+    auto width = mip_maps[level].width;
+    auto x = floor(uv[0] * width);
+    auto y = floor(uv[1] * height);
+    const unsigned char* res;
+    texture_mipmap_minify(x, y, level, res);
+    for (int i = 0; i < channels; ++i)
+    {
+        result[i] = res[i];
+    }
+}
+
+void Texture::texture_mipmap_minify_linear(const L_MATH::Vec<float, 2>& uv, int level, unsigned char*& result)
 {
     level = std::min(level, (int)(mip_maps.size() - 1));
     auto height = mip_maps[level].height;
@@ -144,6 +158,20 @@ void Texture::texture_mipmap_minify(const L_MATH::Vec<float, 2> &uv, int level, 
 }
 
 void Texture::texture_mipmap_magnify(const L_MATH::Vec<float, 2> &uv, int level, unsigned char *&result)
+{
+    if(level==0)
+    {
+        texture_mipmap_minify(uv, level, result);
+        return;
+    }
+    auto height = mip_maps[0].height << level;
+    auto width = mip_maps[0].width << level;
+    auto x = floor(uv[0] * width);
+    auto y = floor(uv[1] * height);
+    texture_mipmap_magnify(x, y, level, result);
+}
+
+void Texture::texture_mipmap_magnify_linear(const L_MATH::Vec<float, 2>& uv, int level, unsigned char*& result)
 {
     if(level==0)
     {
@@ -249,7 +277,13 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, const Vec2 &lodv, unsigned
         lod = -0.5f * log(std::max(lodv[0] * w * w,
                                    lodv[1] * h * h));
     }
-    sample(uv, lod, result);
+    if (linear)
+    {
+        sample_linear(uv, lod, result);
+    }else
+    {
+        sample(uv, lod, result);
+    }
 }
 
 Texture::Texture(const char* fileName,bool generate_mipmap)
@@ -276,7 +310,7 @@ Texture::Texture(const char* fileName,bool generate_mipmap)
     }
 }
 
-void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *result)
+void Texture::sample_linear(const L_MATH::Vec<float, 2>& uv, float lod, unsigned char* result)
 {
     if (lod <= 0)
     {
@@ -291,6 +325,8 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *
         {
             result[i] = tx1[i] * (1 - alpha) + tx2[i] * alpha;
         }
+        delete[] tx1;
+        delete[] tx2;
     }
     else
     {
@@ -304,6 +340,23 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *
         {
             result[i] = tx1[i] * (1 - alpha) + tx2[i] * alpha;
         }
+        delete[] tx1;
+        delete[] tx2;
+    }
+}
+
+void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *result)
+{
+    if (lod <= 0)
+    {
+        lod = abs(lod);
+        int l = floor(lod);
+        texture_mipmap_minify(uv, l, result);
+    }
+    else
+    {
+        int l = floor(lod);
+        texture_mipmap_magnify(uv, l, result);
     }
 }
 

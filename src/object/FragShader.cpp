@@ -4,22 +4,25 @@
 
 #include "FragShader.h"
 
+#include "Camera.h"
 #include "Context.h"
+#include "DrawCallContext.h"
 #include "Light.h"
 #include "Material.h"
 #include "MeshRender.h"
+#include "Transform.h"
 #include "WindowHandle.h"
 
 
-void FragShader::begin_draw_call(DrawCallData* pass)
+void FragShader::begin_draw_call(DrawCallContext* pass)
 {
-    fragment_map = &pass->pass_node.camera->fragment_map;
+    fragment_map = pass->camera->fragment_map;
     draw_call = pass;
     this->ctx = pass->ctx;
     pass->ctx->get_screen_size(this->width, this->height);
 }
 
-void FragShader::end_draw_call(DrawCallData* pass)
+void FragShader::end_draw_call(DrawCallContext* pass)
 {
     fragment_map=nullptr;
     draw_call = nullptr;
@@ -43,7 +46,7 @@ Vec4 FragShader::run(int frag_index )
 
 Fragment& FragShader::get_fragment(int frag_index) const
 {
-    return (*fragment_map)[frag_index];
+    return fragment_map[frag_index];
 }
 
 void FragShader::sample_texture(int texture_index, int index, L_MATH::Vec<float, 4>& color)
@@ -76,50 +79,82 @@ Vec4 TextureFragShader::run(int frag_index)
 
 L_MATH::Vec<float, 4> LightFragShader::run(int frag_index)
 {
-    auto fragment = (*fragment_map)[frag_index];
-    auto mesh = fragment.vertex_attribute.attributes;
-    Mat44 model_mat;
-    auto& rot_mat = static_cast<Mat33&>(model_mat);
-    Vec4 texture_color={0.5,0.5,0.5,1};
-    texture_color[3] = 1;
-    sample_texture(0, frag_index, texture_color);
-    this->draw_call->get_model_matrix(mesh, model_mat);
-    Vec3 pos, normal;
-    Vec4& pos4 = static_cast<L_MATH::Vec<float, 4>&>(pos);
-    pos[3] = 1;
-    fragment.vertex_attribute.get_attribute_value(POS, pos);
-    calculate_normal(frag_index, normal);
-    normal[2]*=-1;
-    pos4 = pos4.mul_transpose(model_mat);
-    normal = normal.mul_transpose(rot_mat);
-    normal.normalized();
-    Vec3 view_dir = (this->draw_call->pass_node.camera->scene_node->get_global_pos() - pos).normalize();
+    auto& fragment = fragment_map[frag_index];
+    auto fix_outputs = fragment.interpolation_data.output.fix_outputs;
+    auto& view_light_dirs = fragment.interpolation_data.output.view_light_dirs;
+
+    Vec3 view_dir, view_normal;
+    view_dir = static_cast<L_MATH::Vec<float, 3>&>(fix_outputs[VIEW_VIEW_DIR]);
+    view_normal = static_cast<L_MATH::Vec<float, 3>&>(fix_outputs[VIEW_NORMAL]);
+    view_dir.normalized();
+    view_normal.normalized();
     auto kd = this->draw_call->materials[0]->get_Vec3_uniform(MATERIAL_LIGHT_KD);
     auto ks = this->draw_call->materials[0]->get_Vec3_uniform(MATERIAL_LIGHT_KS);
-    Vec3& color =static_cast<L_MATH::Vec<float, 3>&>(texture_color);
+    Vec4 texture_color;
+    sample_texture(0, frag_index, texture_color);
+    Vec4 frag_color;
+    frag_color[3] = 1;
+    Vec3& frag_color_v3 = static_cast<L_MATH::Vec<float, 3>&>(frag_color);
+    int light_index = 0;
     for (auto light : ctx->light_manager->get_objects())
     {
-        auto light_color = light->color * light->intensity;
-        Vec3 light_dir = (light->scene_node->get_global_pos() - pos).normalize();
+        Vec3 light_dir = static_cast<L_MATH::Vec<float, 3>&>(view_light_dirs[light_index]);
+        auto light_dis = light_dir.sqrt_magnitude();
+        light_dir /= light_dis;
+        auto light_color = texture_color * light->color * light->intensity / (light_dis * light_dis);
         auto h = ((light_dir + view_dir) / 2).normalize();
-        color += kd * std::max(0.f, light_dir.dot(normal))*light_color;
-        color += ks * std::pow(std::max(0.f, h.dot(normal)), 200) * light_color;
+        frag_color_v3 += kd * std::max(0.f, light_dir.dot(view_normal))*light_color;
+        frag_color_v3 += ks * std::pow(std::max(0.f, h.dot(view_normal)), 200) * light_color;
+        light_index++;
     }
-    L_MATH::clamp(texture_color,Vec4::ZERO,Vec4::ONE);
-    return texture_color;
+    L_MATH::clamp(frag_color,Vec4::ZERO,Vec4::ONE);
+    return frag_color;
 }
 
 void LightFragShader::calculate_normal(int frag_index, L_MATH::Vec<float, 3>& res)
 {
-    get_fragment(frag_index).vertex_attribute.get_attribute_value(NORMAL, res);
+    get_fragment(frag_index).interpolation_data.get_attribute_value(NORMAL, res);
 }
 
-void NormalTextureLightFragShader::calculate_normal(int frag_index, L_MATH::Vec<float, 3>& res)
+L_MATH::Vec<float, 4> NormalTextureLightFragShader::run(int frag_index)
 {
-    sample_texture(frag_index, this->draw_call->textures[1], res);
-    res *= 2.0;
-    res -= 1.0;
+    auto& fragment = fragment_map[frag_index];
+    auto fix_outputs = fragment.interpolation_data.output.fix_outputs;
+    auto& tbn_light_dirs = fragment.interpolation_data.output.tbn_light_dirs;
+    Vec3 tbn_view_dir, tbn_view_normal;
+    tbn_view_dir = static_cast<L_MATH::Vec<float, 3>&>(fix_outputs[TBN_VIEW_DIR]);
+    tbn_view_dir.normalized();
+    sample_texture(1, frag_index, static_cast<L_MATH::Vec<float, 4>&>(tbn_view_normal));
+    tbn_view_normal = (tbn_view_normal * 2 - 1);
+    auto bump_factor = this->draw_call->materials[0]->get_float_uniform(MATERIAL_NORMAL_BUMP_FACTOR);
+    tbn_view_normal[0] *= bump_factor;
+    tbn_view_normal[1] *= bump_factor;
+    tbn_view_normal.normalized();
+    auto kd = this->draw_call->materials[0]->get_Vec3_uniform(MATERIAL_LIGHT_KD);
+    auto ks = this->draw_call->materials[0]->get_Vec3_uniform(MATERIAL_LIGHT_KS);
+    Vec4 texture_color;
+    sample_texture(0, frag_index, texture_color);
+    Vec4 frag_color;
+    Vec3& frag_color_v3 = static_cast<L_MATH::Vec<float, 3>&>(frag_color);
+    int light_index = 0;
+    frag_color_v3[3] = 1;
+    for (auto light : ctx->light_manager->get_objects())
+    {
+        Vec3 light_dir = static_cast<L_MATH::Vec<float, 3>&>(tbn_light_dirs[light_index]);
+        auto light_dis = light_dir.sqrt_magnitude();
+        light_dir /= light_dis;
+        auto light_color = texture_color * light->color * light->intensity / (light_dis * light_dis);
+        auto h = ((light_dir + tbn_view_dir) / 2).normalize();
+        frag_color_v3 += kd * std::max(0.f, light_dir.dot(tbn_view_normal))*light_color;
+        frag_color_v3 += ks * std::pow(std::max(0.f, h.dot(tbn_view_normal)), 200) * light_color;
+        light_index++;
+    }
+    // frag_color_v3
+    // color /= 6;
+    L_MATH::clamp(frag_color,Vec4::ZERO,Vec4::ONE);
+    return frag_color;
 }
+
 
 
 

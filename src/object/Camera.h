@@ -17,35 +17,30 @@ class Camera : public Component
 {
     INIT_TYPE(Camera, Component)
     bool is_proj;
-    void update_projection_mat();
-    bool is_render_job_finish(int job_group_id) const;
-    int frame_begin_job_id = 0;
-    int frame_cur_max_job_id = 0;
-    void update_frame_job_id(int job_group_id);
     void on_create() override;
     void on_delete() override;
     Camera(float near, float far, float fov, float ratio, bool isProj);
+    Mat44 view_mat;
+    Mat44 proj_mat;
+
 public:
+    ~Camera() override;
+    int w;
+    int h;
     int render_layer = 1;
     bool solid_color = false;
-    std::vector<Fragment> fragment_map;
-    std::vector<float> depth_buff;
+    Fragment* fragment_map{};
+    float* depth_buff{};
     Color background_color = BLACK;
     bool enable_ray_cast = false;
-    Mat44 projection_mat;
     float near, far, fov, ratio;
-    int render_fragment(Context* ctx);
-    void draw_begin(Context* ctx);
-    void draw_end(Context* ctx);
-    int ray_cast_scene(Context* ctx);
-    int raster_scene(Context* ctx);
-    void generate_primitive(Context* ctx);
-    void wait_finish();
-    int clear(Context* ctx);
-    Mat44 get_view_mat() const;
+    const Mat44& get_view_mat() const;
+    const Mat44& get_proj_mat() const;
+    void update_view_mat() ;
+    void update_proj_mat() ;
     bool is_render_layer(int sort_layer) const;
+    int clear(Context* ctx);
 }
-
 ;
 
 class CamaraManager : public ObjectManger<Camera>

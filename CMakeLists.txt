@@ -78,6 +78,10 @@ add_executable(LinRasterizer src/main.cpp
         src/EventSystem.h
         src/object/Light.cpp
         src/object/Light.h
+        src/object/VertShader.cpp
+        src/object/VertShader.h
+        src/DrawCallContext.cpp
+        src/DrawCallContext.h
 )
 target_include_directories(LinRasterizer PRIVATE ${X11_INCLUDE_DIR})
 target_include_directories(LinRasterizer PRIVATE ./include)

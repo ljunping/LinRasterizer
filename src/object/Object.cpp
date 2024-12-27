@@ -9,6 +9,7 @@
 #include "FragShader.h"
 #include "Light.h"
 #include "MeshRender.h"
+#include "VertShader.h"
 
 int TypeFactory::type_id = 0;
 std::unordered_map<int, Object* (*)()> TypeFactory::type_creator_map;
@@ -32,6 +33,8 @@ DEFINE_TYPE(MeshProvider)
 DEFINE_TYPE(LightFragShader)
 DEFINE_TYPE(NormalTextureLightFragShader)
 DEFINE_TYPE(Light)
+DEFINE_TYPE(VertShader)
+
 
 
 
@@ -93,6 +96,7 @@ void TypeFactory::RegisterTypes()
     REGISTER_TYPE(LightFragShader)
     REGISTER_TYPE(Light);
     REGISTER_TYPE(NormalTextureLightFragShader)
+    REGISTER_TYPE(VertShader)
 }
 
 

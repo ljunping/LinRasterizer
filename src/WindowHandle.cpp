@@ -51,6 +51,7 @@ void WindowHandle::event_loop()
 
 void WindowHandle::on_resize(int _w, int _h)
 {
+
     w = _w;
     h = _h;
     if (default_frame_buff != nullptr)

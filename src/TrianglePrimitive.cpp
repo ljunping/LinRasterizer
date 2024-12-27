@@ -7,7 +7,7 @@
 #include "debug.h"
 
 
-inline void Sutherland_Hodgman(std::vector<Vec3>& clip_plane_normal,
+void Sutherland_Hodgman(std::vector<Vec3>& clip_plane_normal,
                                std::vector<float>& clip_plane_c,
                                std::vector<Vec3>& ccw_points, std::vector<std::vector<float>>* result)
 {
@@ -99,19 +99,6 @@ Vec3 TrianglePrimitive::st_box_plane_normal[6] = {
 Box<3> TrianglePrimitive::st_box(Vec3{-1, -1, -1},Vec3{1, 1, 1});
 
 
-TrianglePrimitive::TrianglePrimitive(VertexAttribute& v0, VertexAttribute& v1, VertexAttribute& v2):
-    id(0), inv_cross_dir_z(0),
-    inv_normal_dir_z(0), cache_area(0), d(0)
-{
-    vert[0] = v0;
-    vert[1] = v1;
-    vert[2] = v2;
-    v0.get_attribute_value(POS, v[0]);
-    v1.get_attribute_value(POS, v[1]);
-    v2.get_attribute_value(POS, v[2]);
-    inv_w = Vec3::ONE;
-}
-
 
 bool TrianglePrimitive::ccw() const
 {
@@ -183,18 +170,18 @@ void TrianglePrimitive::barycentric(const L_MATH::Vec<float, 3>& p,Vec3& alpha) 
     alpha.data[2] = 1 - alpha.data[0] - alpha.data[1];
 }
 
-void TrianglePrimitive::update(const L_MATH::Mat<float, 4, 4>& mat)
-{
-    for (int i = 0; i < 3; ++i)
-    {
-        Vec4& _v4 = static_cast<L_MATH::Vec<float, 4>&>(v[i]);
-        _v4[3] = 1;
-        _v4 = _v4.mul_transpose(mat);
-        inv_w[i] = 1 / _v4[3];
-        _v4 /= _v4[3];
-    }
-    update_param();
-}
+// void TrianglePrimitive::update(const L_MATH::Mat<float, 4, 4>& mat)
+// {
+//     for (int i = 0; i < 3; ++i)
+//     {
+//         Vec4& _v4 = static_cast<L_MATH::Vec<float, 4>&>(v[i]);
+//         _v4[3] = 1;
+//         _v4 = _v4.mul_transpose(mat);
+//         inv_w[i] = 1 / _v4[3];
+//         _v4 /= _v4[3];
+//     }
+//     update_param();
+// }
 
 void TrianglePrimitive::update_param()
 {
@@ -207,13 +194,14 @@ void TrianglePrimitive::update_param()
     cache_area = cross_dir.sqrt_magnitude() / 2;
     normal_dir = cross_dir.normalize();
     d = normal_dir.dot(v[0]);
-
+    inv_w[0] = 1 / v[0][3];
+    inv_w[1] = 1 / v[1][3];
+    inv_w[2] = 1 / v[2][3];
     if (L_MATH::is_zero(cross_dir[2]) || L_MATH::is_zero(normal_dir[2]))
     {
         discard = true;
         return;
     }
-
     inv_cross_dir_z = 1 / cross_dir[2];
     inv_normal_dir_z = 1 / normal_dir[2];
     clipped = false;

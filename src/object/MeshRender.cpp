@@ -6,9 +6,10 @@
 #if __linux__
 #include <bits/ranges_algo.h>
 #endif
+#include "Camera.h"
 #include "Context.h"
 #include "Transform.h"
-
+#include "DrawCallContext.h"
 
 static bool compare_transparent_render_node(const RenderNode& a, const RenderNode& b)
 {
@@ -52,90 +53,6 @@ bool equal_compare_render_node(const RenderNode& a, const RenderNode& b)
         && a.frag_shader == b.frag_shader;
 }
 
-bool DrawCallData::try_add_render_node(RenderNode& node)
-{
-    init(node);
-    if (!equal_compare_render_node(node, pass_node))
-    {
-        return false;
-    }
-    meshes.emplace_back(node.mesh, node.model_matrix);
-    return true;
-}
-
-void DrawCallData::init(const RenderNode& node)
-{
-    if (!is_init)
-    {
-        is_init = true;
-        pass_node = node;
-        this->ctx = get_current_ctx();
-        for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
-        {
-            this->materials[i] = Resource::get_resource<Material>(node.materials[i]);
-        }
-        for (int i = 0; i < MAX_TEXTURES_COUNT; ++i)
-        {
-            this->textures[i] = Resource::get_resource<Texture>(node.textures[i]);
-        }
-        this->frag_shader = Resource::get_resource<FragShader>(node.frag_shader);
-        this->frame_buff = ctx->get_frame_buffer(node.frame_buff_index);
-    }
-}
-
-DrawCallData::~DrawCallData()
-{
-    free(this->tri_pool);
-    delete bvh_tree;
-}
-
-void DrawCallData::assign_triangle_primitives(int size)
-{
-    if (primitives.size() != size)
-    {
-        primitives.resize(size);
-        free(this->tri_pool);
-        this->tri_pool = static_cast<TrianglePrimitive*>(malloc(size * sizeof(TrianglePrimitive)));
-    }
-}
-
-void DrawCallData::build_bvh_tree()
-{
-    this->bvh_tree = new BVHTree();
-    this->bvh_tree->build(this->primitives);
-}
-
-void DrawCallData::draw_call_begin()
-{
-    this->frag_shader->begin_draw_call(this);
-}
-
-void DrawCallData::draw_call_end()
-{
-    this->frag_shader->end_draw_call(this);
-}
-
-void DrawCallData::get_model_matrix(const Mesh* mesh, L_MATH::Mat<float, 4, 4>& m) const
-{
-    for (auto _mesh : meshes)
-    {
-        if (_mesh.first == mesh->get_resource_id())
-        {
-            m = _mesh.second;
-            return;
-        }
-    }
-}
-
-void DrawCallData::get_view_matrix(L_MATH::Mat<float, 4, 4>& m) const
-{
-    m = this->pass_node.camera->get_view_mat();
-}
-
-void DrawCallData::get_proj_matrix(L_MATH::Mat<float, 4, 4>& m) const
-{
-    m = this->pass_node.camera->projection_mat;
-}
 
 
 void RenderComponent::on_create()
@@ -192,6 +109,7 @@ void MeshRender::collect_render_node(Camera* camera,std::vector<RenderNode>& ren
     render_node.render_order = this->render_order;
     render_node.transparent = this->transparent;
     render_node.camera = camera;
+    render_node.vert_shader = this->vert_shader;
     for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
     {
         render_node.materials[i] = this->materials[i];
@@ -214,7 +132,7 @@ void RenderManager::collection_render_node(Camera* camera, std::vector<RenderNod
 }
 
 
-void RenderManager::calculate_render_pass(Camera* camera, std::vector<DrawCallData>& render_passes,bool transparent)
+void RenderManager::calculate_render_pass(Camera* camera, std::vector<DrawCallContext>& render_passes,bool transparent)
 {
     std::vector<RenderNode> render_nodes;
     collection_render_node(camera, render_nodes, transparent);
@@ -237,11 +155,23 @@ void RenderManager::calculate_render_pass(Camera* camera, std::vector<DrawCallDa
     }else
     {
         std::ranges::sort(render_nodes, compare_transparent_render_node);
+        render_passes.emplace_back();
         for (auto render_node : render_nodes)
         {
-            render_passes.emplace_back();
-            render_passes.back().try_add_render_node(render_node);
+            if (render_passes.back().try_add_render_node(render_node))
+            {
+                render_passes.emplace_back();
+            }
         }
     }
 
 }
+
+
+
+
+
+
+
+
+

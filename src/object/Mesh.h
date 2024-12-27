@@ -6,22 +6,14 @@
 #define ATTRIBUTE_H
 #pragma once
 #include "Box.h"
-#include "CommonMacro.h"
 #include "L_math.h"
 #include "Object.h"
 #include "Resource.h"
 
+struct VertexInterpolation;
 class Mesh;
 class TrianglePrimitive;
-enum AttributeType
-{
-    POS,
-    NORMAL,
-    COLOR,
-    UV,
-    TANGENT,
-    AttributeTypeCount,
-};
+
 struct AttributeDataFormat
 {
     AttributeType type;
@@ -29,18 +21,7 @@ struct AttributeDataFormat
     int offset;
     int stride;
 };
-//这个类纯数据类，不要继承其他类，不能执行析构函数
-struct  VertexAttribute
-{
-    const Mesh* attributes;
-    float values[AttributeTypeCount * 4];
-    int v[3];
-    Vec3 alpha;
-    template<int N>
-    void get_attribute_value(int attribute_index, L_MATH::Vec<float, N>& result);
-    void calculate_values();
-    void reset();
-};
+
 
 class Mesh : public Resource
 {
@@ -56,59 +37,42 @@ public:
     int id = 0;
     void on_create() override;
     std::vector<int> ebo;
-    AttributeDataFormat data_formats[AttributeTypeCount];
+    AttributeDataFormat data_formats[AttributeTypeCount]{};
     SHARE_PTR<float[]> vbo;
     int data_size;
     int vert_count;
     int vert_data_length;
+    std::vector<Vec3> tangents;
     ~Mesh();
     void bind_attribute(AttributeType type, int attr_unit_size, int offset, int stride);
-    void create_vert_attribute(int v0, int v1, int v2, const L_MATH::Vec<float, 3>& alpha,
-                               VertexAttribute& result) const;
-    void create_vert_attribute(const VertexAttribute& v0, const VertexAttribute& v1, const VertexAttribute& v2,
-                               const L_MATH::Vec<float, 3>& alpha, VertexAttribute& result) const;
-    void generate_triangles(std::vector<TrianglePrimitive>& result) const;
-    void generate_triangle(TrianglePrimitive& tri, int tri_index) const;
+    void generate_triangle_index(TrianglePrimitive& tri, int tri_index);
+    void generate_triangle(TrianglePrimitive& tri, int tri_index);
     int tri_count() const;
-    void generate_triangle(int v0, int v1, int v2, TrianglePrimitive& result) const;
-    void generate_triangles(const std::vector<int>& ebo, std::vector<TrianglePrimitive>& result) const;
     float* operator[](int vert_index) const;
     template <int N>
     void get_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<float, N>& result) const;
     Vec3 get_mesh_centroid();
+    void calculate_tangents();
     Box<3> get_box();
-};
-
-
-template <int N>
-void VertexAttribute::get_attribute_value(int attribute_index, L_MATH::Vec<float, N>& result)
-{
-    auto offset = attributes->data_formats[attribute_index].offset;
-    if constexpr (N == 3)
-    {
-        result[0] = values[offset];
-        result[1] = values[offset + 1];
-        result[2] = values[offset + 2];
-    }
-
-    if constexpr (N == 2)
-    {
-        result[0] = values[offset];
-        result[1] = values[offset + 1];
-    }
-
-    if constexpr (N == 4)
-    {
-        result[0] = values[offset];
-        result[1] = values[offset + 1];
-        result[2] = values[offset + 2];
-        result[3] = values[offset + 3];
-    }
 }
+;
+
+
+
+
 
 template <int N>
 void Mesh::get_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<float, N>& result) const
 {
+    if constexpr (N == 3)
+    {
+        if (attribute_index == TANGENT && data_formats[attribute_index].type != TANGENT && data_formats[UV].type == UV)
+        {
+            result = tangents[vert_index];
+            return;
+        }
+    }
+
     auto offset = data_formats[attribute_index].offset;
     auto values = (*this)[vert_index];
     if constexpr (N == 3)

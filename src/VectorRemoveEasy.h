@@ -7,41 +7,52 @@
 #include <unordered_map>
 #include <vector>
 #define VectorRemoveHelper_MIN_REMOVE_SIZE 16
-template<typename T>
-class VectorRemoveHelperElementInterface
-{
-public:
-    T data;
-    bool remove;
-    VectorRemoveHelperElementInterface(const T& data): data(data)
-    {
-        remove = false;
-    }
-    void set_remove()
-    {
-        remove = true;
-    }
-    bool is_remove()
-    {
-        return remove;
-    }
-};
 
-
-
-template <typename T>
-class VectorRemoveEasyIterator;
-template <typename T>
-class SimpleVectorRemoveEasyIterator;
 
 template <typename T>
 class VectorRemoveEasy
 {
+    class VectorRemoveHelperElementInterface
+    {
+    public:
+        T data;
+        bool remove;
+        explicit VectorRemoveHelperElementInterface(const T& data);
+        void set_remove();
+        bool is_remove() const;
+    };
+    class VectorRemoveEasyIterator
+    {
+    private:
+        int _index = 0;
+        std::vector<VectorRemoveHelperElementInterface> & _VectorRemoveEasy;
+        void next_index();
+        void pre_index();
+    public:
+        explicit VectorRemoveEasyIterator(std::vector<VectorRemoveHelperElementInterface>& _VectorRemoveEasy, int index);
+
+        T& operator*();
+
+        VectorRemoveEasyIterator& operator++();
+
+        VectorRemoveEasyIterator& operator--();
+
+        bool operator<(const VectorRemoveEasyIterator& other);
+
+        bool operator<=(const VectorRemoveEasyIterator& other);
+
+        bool operator>=(const VectorRemoveEasyIterator& other);
+
+        bool operator>(const VectorRemoveEasyIterator& other);
+
+        bool operator!=(const VectorRemoveEasyIterator & other);
+
+        bool operator==(const VectorRemoveEasyIterator & other);
+    };
     static_assert(std::is_pointer<T>::value, "Template parameter T must be a pointer type.");
-    friend class VectorRemoveEasyIterator<T>;
 private:
     int cur_remove_count = 0;
-    std::vector<VectorRemoveHelperElementInterface<T>> data_vec;
+    std::vector<VectorRemoveHelperElementInterface> data_vec;
     std::unordered_map<T, int> index_map;
     bool is_remove(int index);
 public:
@@ -51,83 +62,9 @@ public:
     void push_back(T& elem);
     void pop_back();
     void clear();
-    VectorRemoveHelperElementInterface<T>& operator[](int index);
-    VectorRemoveEasyIterator<T> begin();
-    VectorRemoveEasyIterator<T> end();
-};
-
-
-
-template <typename T>
-class VectorRemoveEasyIterator
-{
-    friend class VectorRemoveEasy<T>;
-private:
-    int _index = 0;
-    std::vector<VectorRemoveHelperElementInterface<T>> & _VectorRemoveEasy;
-    void next_index()
-    {
-        while (_index < _VectorRemoveEasy.size() && _VectorRemoveEasy[_index].is_remove())
-        {
-            _index++;
-        }
-    }
-    void pre_index()
-    {
-        while (_index >= 0 && _index < _VectorRemoveEasy.size() && _VectorRemoveEasy[_index].is_remove())
-        {
-            _index--;
-        }
-    }
-public:
-    explicit VectorRemoveEasyIterator(std::vector<VectorRemoveHelperElementInterface<T>>& _VectorRemoveEasy, int index):
-    _VectorRemoveEasy(_VectorRemoveEasy),_index(index)
-    {
-
-    }
-    T& operator*()
-    {
-        return _VectorRemoveEasy[_index].data;
-    }
-    VectorRemoveEasyIterator& operator++()
-    {
-        _index++;
-        next_index();
-        return *this;
-    }
-    VectorRemoveEasyIterator& operator--()
-    {
-        _index--;
-        pre_index();
-        return *this;
-    }
-    bool operator<(const VectorRemoveEasyIterator& other)
-    {
-        return _index < other._index;
-    }
-    bool operator<=(const VectorRemoveEasyIterator& other)
-    {
-        return _index <= other._index;
-    }
-    bool operator>=(const VectorRemoveEasyIterator& other)
-    {
-        return _index >= other._index;
-    }
-
-    bool operator>(const VectorRemoveEasyIterator& other)
-    {
-        return _index > other._index;
-    }
-
-    bool operator!=(const VectorRemoveEasyIterator & other)
-    {
-        return _index != other._index;
-    }
-
-    bool operator==(const VectorRemoveEasyIterator & other)
-    {
-        return _index == other._index;
-    }
+    VectorRemoveHelperElementInterface& operator[](int index);
+    VectorRemoveEasyIterator begin();
+    VectorRemoveEasyIterator end();
 };
 
 
@@ -164,6 +101,109 @@ void VectorRemoveEasy<T>::easy_remove(T& elem)
     }
 }
 
+
+template <typename T>
+VectorRemoveEasy<T>::VectorRemoveHelperElementInterface::VectorRemoveHelperElementInterface(const T& data): data(data)
+{
+    remove = false;
+}
+
+template <typename T>
+void VectorRemoveEasy<T>::VectorRemoveHelperElementInterface::set_remove()
+{
+    remove = true;
+}
+
+template <typename T>
+bool VectorRemoveEasy<T>::VectorRemoveHelperElementInterface::is_remove() const
+{
+    return remove;
+}
+
+template <typename T>
+void VectorRemoveEasy<T>::VectorRemoveEasyIterator::next_index()
+{
+    while (_index < _VectorRemoveEasy.size() && _VectorRemoveEasy[_index].is_remove())
+    {
+        _index++;
+    }
+}
+
+template <typename T>
+void VectorRemoveEasy<T>::VectorRemoveEasyIterator::pre_index()
+{
+    while (_index >= 0 && _index < _VectorRemoveEasy.size() && _VectorRemoveEasy[_index].is_remove())
+    {
+        _index--;
+    }
+}
+
+template <typename T>
+VectorRemoveEasy<T>::VectorRemoveEasyIterator::VectorRemoveEasyIterator(
+    std::vector<VectorRemoveHelperElementInterface>& _VectorRemoveEasy, int index):
+    _VectorRemoveEasy(_VectorRemoveEasy),_index(index)
+{
+
+}
+
+template <typename T>
+T& VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator*()
+{
+    this->next_index();
+    return _VectorRemoveEasy[_index].data;
+}
+
+template <typename T>
+typename VectorRemoveEasy<T>::VectorRemoveEasyIterator& VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator++()
+{
+    _index++;
+    next_index();
+    return *this;
+}
+
+template <typename T>
+typename VectorRemoveEasy<T>::VectorRemoveEasyIterator& VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator--()
+{
+    _index--;
+    pre_index();
+    return *this;
+}
+
+template <typename T>
+bool VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator<(const VectorRemoveEasyIterator& other)
+{
+    return _index < other._index;
+}
+
+template <typename T>
+bool VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator<=(const VectorRemoveEasyIterator& other)
+{
+    return _index <= other._index;
+}
+
+template <typename T>
+bool VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator>=(const VectorRemoveEasyIterator& other)
+{
+    return _index >= other._index;
+}
+
+template <typename T>
+bool VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator>(const VectorRemoveEasyIterator& other)
+{
+    return _index > other._index;
+}
+
+template <typename T>
+bool VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator!=(const VectorRemoveEasyIterator& other)
+{
+    return _index != other._index;
+}
+
+template <typename T>
+bool VectorRemoveEasy<T>::VectorRemoveEasyIterator::operator==(const VectorRemoveEasyIterator& other)
+{
+    return _index == other._index;
+}
 
 template <typename T>
 bool VectorRemoveEasy<T>::is_remove(int index)
@@ -214,26 +254,30 @@ void VectorRemoveEasy<T>::clear()
 }
 
 template <typename T>
-VectorRemoveHelperElementInterface<T>& VectorRemoveEasy<T>::operator[](int index)
+typename VectorRemoveEasy<T>::VectorRemoveHelperElementInterface& VectorRemoveEasy<T>::operator[](int index)
 {
     return this->data_vec[index];
 }
 
 
 template <typename T>
-VectorRemoveEasyIterator<T> VectorRemoveEasy<T>::begin()
+typename VectorRemoveEasy<T>::VectorRemoveEasyIterator VectorRemoveEasy<T>::begin()
 {
-    auto vector_remove_easy_iterator = VectorRemoveEasyIterator<T>(this->data_vec, 0);
-    vector_remove_easy_iterator.next_index();
+    auto vector_remove_easy_iterator = VectorRemoveEasyIterator(this->data_vec, 0);
+    if (this->valid_size() > 0)
+    {
+        auto remove_easy_iterator = *vector_remove_easy_iterator;
+    }
     return vector_remove_easy_iterator;
 }
 
 template <typename T>
-VectorRemoveEasyIterator<T> VectorRemoveEasy<T>::end()
+typename VectorRemoveEasy<T>::VectorRemoveEasyIterator VectorRemoveEasy<T>::end()
 {
-    auto vector_remove_easy_iterator = VectorRemoveEasyIterator<T>(this->data_vec, this->size());
+    auto vector_remove_easy_iterator = VectorRemoveEasyIterator(this->data_vec, this->size());
     return vector_remove_easy_iterator;
 }
 
+#undef VectorRemoveHelper_MIN_REMOVE_SIZE
 
 #endif //UTIL_H

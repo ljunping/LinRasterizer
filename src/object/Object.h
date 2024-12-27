@@ -40,10 +40,8 @@ type_name::type_id = TypeFactory::register_type<type_name>();\
 int type_name::type_id = 0;
 
 #include <unordered_map>
-
 #include "CommonMacro.h"
 #include "VectorRemoveEasy.h"
-
 
 class Object
 {

@@ -19,6 +19,7 @@
 struct JobGroup;
 
 inline void default_complete(std::size_t begin, std::size_t end, void* global){};
+
 struct Job
 {
     int data_begin;

@@ -418,11 +418,8 @@ namespace L_MATH
         T dot(const Vec<T, Col>& other) const;
         T magnitude() const;
         T sqrt_magnitude() const;
-
         Vec<T, Col> normalize() const;
-
         void normalized();
-
 
         DECLARE_VEC_OPT(+, Col)
         DECLARE_VEC_OPT(-, Col)
@@ -437,7 +434,6 @@ namespace L_MATH
     class Mat
     {
         Vec<T, MIN_RC<Row, 4>> data[MIN_RC<Col, 4>]{};
-
         void clear(T t)
         {
             for (int i = 0; i < Col; ++i)
@@ -448,7 +444,6 @@ namespace L_MATH
                 }
             }
         }
-
     public:
         Mat() = default;
 
@@ -517,7 +512,7 @@ namespace L_MATH
         }
 
         template<int ROW2,int COL2>
-        explicit operator L_MATH::Mat<T, ROW2, COL2>&()
+        explicit operator L_MATH::Mat<T, ROW2, COL2>&() const
         {
             if constexpr (ROW2 > 4 || COL2 > 4 || Row > 4 || Col > 4)
             {
@@ -527,7 +522,7 @@ namespace L_MATH
         }
 
         template<int ROW2,int COL2>
-        explicit operator const L_MATH::Mat<T, ROW2, COL2>&()
+        explicit operator const L_MATH::Mat<T, ROW2, COL2>&() const
         {
             if constexpr (ROW2 > 4 || COL2 > 4 || Row > 4 || Col > 4)
             {
@@ -1043,6 +1038,21 @@ namespace L_MATH
             r[2] = 0;
         }
     }
+
+    inline void pos3_l_dot_mat44(Vec3& v, const Mat44& mat)
+    {
+        Vec4& v4 = static_cast<L_MATH::Vec<float, 4>&>(v);
+        v4[3] = 1;
+        v4 = v4.mul_transpose(mat);
+        v /= v4[3];
+    }
+    inline void pos3_l_dot_mat33(Vec3& v, const Mat44& mat)
+    {
+        const Mat33& mat33 = static_cast<const Mat33&>(mat);
+        v = v.mul_transpose(mat33);
+    }
+
+
 
     inline Mat44 compose_trs(const Vec3& t,const Vec3& r,const Vec3& s)
     {

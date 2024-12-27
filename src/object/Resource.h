@@ -8,8 +8,6 @@
 #include "Object.h"
 
 
-
-
 class Resource : public Object
 {
     INIT_TYPE(Resource, Object)

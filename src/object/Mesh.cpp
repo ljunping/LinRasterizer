@@ -149,6 +149,7 @@ Mesh::Mesh(const char* obj_file_name)
         (vbo.get() + i * vert_data_length)[offset+2] -= mesh_centroid[2];
     }
     this->centroid = Vec3::ZERO;
+    calculate_tangents();
 }
 
 void Mesh::on_create()
@@ -165,50 +166,32 @@ void Mesh::bind_attribute(AttributeType type, int attr_unit_size, int offset, in
     vert_count = data_size / vert_data_length;
 }
 
-void Mesh::create_vert_attribute(int v0, int v1, int v2, const L_MATH::Vec<float, 3>& alpha,
-    VertexAttribute& result) const
-{
-    result.v[0] = v0;
-    result.v[1] = v1;
-    result.v[2] = v2;
-    result.alpha = alpha;
-    result.attributes = this;
-    result.calculate_values();
-}
 
-void Mesh::create_vert_attribute(const VertexAttribute& v0, const VertexAttribute& v1, const VertexAttribute& v2,
-    const L_MATH::Vec<float, 3>& alpha, VertexAttribute& result) const
-{
-    auto vec = v0.alpha * alpha[0] + v1.alpha * alpha[1] + v2.alpha * alpha[2];
-    create_vert_attribute(v0.v[0], v0.v[1], v0.v[2], vec, result);
-}
 
-void Mesh::generate_triangles(std::vector<TrianglePrimitive>& result) const
+
+void Mesh::generate_triangle_index(TrianglePrimitive& tri, int tri_index)
 {
+    tri.id = tri_index;
+    tri.mesh = this;
     if (this->ebo.empty())
     {
-        for (int i = 0; i < vert_count; i = i + 3)
-        {
-            auto& triangle_primitive = result.emplace_back();
-            triangle_primitive.id = this->id * 1000000 + i / 3;
-            generate_triangle(i, i + 1, i + 2, triangle_primitive);
-        }
+        tri.vert_index[0] = tri_index * 3;
+        tri.vert_index[1] = tri_index * 3 + 1;
+        tri.vert_index[2] = tri_index * 3 + 2;
     }else
     {
-        this->generate_triangles(this->ebo, result);
+        tri.vert_index[0] = ebo[tri_index * 3];
+        tri.vert_index[1] = ebo[tri_index * 3 + 1];
+        tri.vert_index[2] = ebo[tri_index * 3 + 2];
     }
-
 }
 
-void Mesh::generate_triangle(TrianglePrimitive& tri, int tri_index) const
+void Mesh::generate_triangle(TrianglePrimitive& tri, int tri_index)
 {
-    if (this->ebo.empty())
-    {
-        generate_triangle(tri_index * 3, tri_index * 3 + 1, tri_index * 3 + 2, tri);
-        return;
-    }
-    generate_triangle(ebo[tri_index * 3], ebo[tri_index * 3 + 1], ebo[tri_index * 3 + 2], tri);
-    tri.id = tri_index;
+    this->generate_triangle_index(tri, tri_index);
+    this->get_attribute_value(tri.vert_index[0], POS, tri.v[0]);
+    this->get_attribute_value(tri.vert_index[1], POS, tri.v[1]);
+    this->get_attribute_value(tri.vert_index[2], POS, tri.v[2]);
 }
 
 int Mesh::tri_count() const
@@ -220,28 +203,6 @@ int Mesh::tri_count() const
     return ebo.size() / 3;
 }
 
-void Mesh::generate_triangle(int v0, int v1, int v2,TrianglePrimitive& result) const
-{
-    create_vert_attribute(v0, v1, v2,Vec3{1, 0, 0}, result.vert[0]);
-    create_vert_attribute(v0, v1, v2,Vec3{0, 1, 0}, result.vert[1]);
-    create_vert_attribute(v0, v1, v2,Vec3{0, 0, 1}, result.vert[2]);
-    result.vert[0].get_attribute_value(POS, result.v[0]);
-    result.vert[1].get_attribute_value(POS, result.v[1]);
-    result.vert[2].get_attribute_value(POS, result.v[2]);
-    result.inv_w = Vec3::ONE;
-}
-
-void Mesh::generate_triangles(const std::vector<int>& ebo, std::vector<TrianglePrimitive>& result) const
-{
-    int max_v = 0;
-    for (int i = 0; i < ebo.size(); i = i + 3)
-    {
-        max_v = fmax(ebo[i], max_v);
-        auto& triangle_primitive = result.emplace_back();
-        triangle_primitive.id = this->id * 1000000 + i / 3;
-        generate_triangle(ebo[i], ebo[i+1], ebo[i+2], triangle_primitive);
-    }
-}
 
 float* Mesh::operator[](int vert_index) const
 {
@@ -265,19 +226,91 @@ L_MATH::Vec<float, 3> Mesh::get_mesh_centroid()
     return centroid;
 }
 
+void Mesh::calculate_tangents()
+{
+    if ((this->data_formats[UV].type != UV))
+    {
+        return;
+    }
+    if (this->data_formats[TANGENT].type == TANGENT)
+    {
+        return;
+    }
+    if (tangents.size() == vert_count)
+    {
+        return;
+    }
+    tangents.resize(vert_count);
+    std::vector<int> tangents_count(vert_count, 0);
+    for (int i = 0; i <tri_count(); ++i)
+    {
+        TrianglePrimitive triangle;
+        generate_triangle_index(triangle, i);
+
+        Vec2 uv0, uv1, uv2;
+        get_attribute_value(triangle.vert_index[0], UV, uv0);
+        get_attribute_value(triangle.vert_index[1], UV, uv1);
+        get_attribute_value(triangle.vert_index[2], UV, uv2);
+
+        Vec3 v0, v1, v2;
+        get_attribute_value(triangle.vert_index[0], POS, v0);
+        get_attribute_value(triangle.vert_index[1], POS, v1);
+        get_attribute_value(triangle.vert_index[2], POS, v2);
+
+        auto p1 = v1 - v0;
+        auto p2 = v2 - v0;
+
+        auto uv10 = uv1 - uv0;
+        auto uv20 = uv2 - uv0;
+        auto inv_f = uv10[0] * uv20[1] - uv10[1] * uv20[0];
+        if (L_MATH::is_zero(inv_f))
+        {
+            continue;
+        }
+        float f = 1 / inv_f;
+        auto tan = ((p1 * uv20[1] - p2 * uv10[1]) * f);
+        tangents[triangle.vert_index[0]] += tan;
+        tangents[triangle.vert_index[1]] += tan;
+        tangents[triangle.vert_index[2]] += tan;
+        ++tangents_count[triangle.vert_index[0]];
+        ++tangents_count[triangle.vert_index[1]];
+        ++tangents_count[triangle.vert_index[2]];
+    }
+
+    for (int i = 0; i < tangents_count.size(); ++i)
+    {
+        Vec3 normal;
+        this->get_attribute_value(i, NORMAL, normal);
+        if (tangents_count[i] == 0)
+        {
+            // 选择一个基向量，通常选择不平行于法线的向量
+            Vec3 basis = (std::abs(normal[0]) < std::abs(normal[1])) ? Vec3{1, 0, 0} : Vec3{0, 1, 0};
+            // 计算垂直于法线的向量
+            tangents[i] = cross(normal, basis).normalize();
+        }else
+        {
+            tangents[i] /= tangents_count[i];
+            tangents[i].normalized();
+            tangents[i] -= normal * dot(normal, tangents[i]);
+            tangents[i].normalized();
+        }
+    }
+}
+
+
 Box<3> Mesh::get_box()
 {
     if (is_generate_box)
     {
         return this->box;
     }
-    std::vector<TrianglePrimitive> primitives;
-    this->generate_triangles(primitives);
     Box<3> box;
-    for (auto primitive : primitives)
+    for (int i = 0; i < tri_count(); ++i)
     {
-        primitive.update_param();
-        box.expand(primitive.box);
+        TrianglePrimitive triangle;
+        this->generate_triangle(triangle, i);
+        triangle.update_param();
+        box.expand(triangle.box);
     }
     this->box = box;
     this->is_generate_box = true;
@@ -285,16 +318,5 @@ Box<3> Mesh::get_box()
 }
 
 
-void VertexAttribute::calculate_values()
-{
-    for (int i = 0; i < attributes->vert_data_length; ++i)
-    {
-        values[i] = (*attributes)[v[0]][i] * alpha[0] + (*attributes)[v[1]][i] * alpha[1] + (*attributes)[v[2]][i] *
-            alpha[2];
-    }
-}
 
-void VertexAttribute::reset()
-{
-}
 

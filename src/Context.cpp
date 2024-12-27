@@ -5,6 +5,7 @@
 #include "Context.h"
 #include <iostream>
 #include "Camera.h"
+#include "DrawCallContext.h"
 #include "EventSystem.h"
 #include "Light.h"
 #include "MeshRender.h"
@@ -33,17 +34,6 @@ void Context::init()
 }
 
 
-
-DrawCallData* Context::current_render_pass()
-{
-    RUNTIME_ASSERT(render_pass_index<render_passes.size(),"fatal error,render_pass_index>=render_passes.size(),");
-    return &render_passes[render_pass_index];
-}
-
-int Context::current_mesa_index() const
-{
-    return this->msaa_index;
-}
 int select_mesh_index;
 void Context::on_key_event(XEvent& event)
 {
@@ -103,9 +93,7 @@ void Context::render()
     });
     for (auto camera : cameras)
     {
-        camera->draw_begin(this);
         render_camera(camera);
-        camera->draw_end(this);
     }
     render_after_scene(this->get_frame_buffer(0));
     this->window_handle->draw_frame_buff();
@@ -113,44 +101,37 @@ void Context::render()
 
 void Context::render_camera(Camera* camera)
 {
-    render_passes.clear();
-    this->render_pass_index = 0;
-    this->msaa_index = 0;
+    JOB_SYSTEM.wait_job_group_finish(camera->clear(this));
+    draw_calls.clear();
     bool _enable_depth_write = setting.enable_depth_write;
-    this->render_manager->calculate_render_pass(camera, render_passes, false);
-    int un_transparent_index = render_passes.size();
-    this->render_manager->calculate_render_pass(camera, render_passes, true);
-    if (render_passes.empty())
+    this->render_manager->calculate_render_pass(camera, draw_calls, false);
+    int un_transparent_index = draw_calls.size();
+    this->render_manager->calculate_render_pass(camera, draw_calls, true);
+    for (int i = 0; i < draw_calls.size(); ++i)
     {
-        return;
-    }
-    camera->clear(this);
-    for (int i = 0; i < render_passes.size(); ++i)
-    {
-        this->render_pass_index = i;
-        auto& render_pass = this->render_passes[i];
-        render_pass.draw_call_begin();
-        camera->generate_primitive(this);
+        auto& draw_call = this->draw_calls[i];
+        draw_call.draw_begin();
+        draw_call.run_vert_shader();
+        draw_call.process_primitives();
         if (i >= un_transparent_index)
         {
+            draw_call.wait_finish();
             setting.enable_depth_write = false;
         }
         for (int j = 0; j < this->setting.msaa_factor; ++j)
         {
-            this->msaa_index = j;
             if (!this->setting.enable_ray_cast)
             {
-                camera->raster_scene(this);
+                draw_call.raster_scene(j);
             }
             else
             {
-                camera->ray_cast_scene(this);
+                draw_call.ray_cast_scene(j);
             }
-            camera->wait_finish();
         }
-        camera->render_fragment(this);
-        camera->wait_finish();
-        render_pass.draw_call_end();
+        draw_call.run_frag_shader();
+        draw_call.draw_end();
+
     }
     setting.enable_depth_write = _enable_depth_write;
 }

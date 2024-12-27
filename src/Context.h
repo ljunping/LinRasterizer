@@ -13,7 +13,7 @@
 class LightManager;
 class CamaraManager;
 struct Fragment;
-struct DrawCallData;
+struct DrawCallContext;
 class Transform;
 class ComponentUpdateManager;
 class RenderManager;
@@ -49,10 +49,8 @@ class Context
     void check_setting_change();
     void render_after_scene(Color* buff);
     void clear_color();
-    int render_pass_index = 0;
-    int msaa_index = 0;
     std::vector<std::tuple<void(*)(Context* context, Color* buff, void* data), void*>> after_scene_render_funcs;
-    std::vector<DrawCallData> render_passes;
+    std::vector<DrawCallContext> draw_calls;
     ContextSetting compare_setting;
     WindowHandle* window_handle;
     void init();
@@ -64,8 +62,6 @@ public:
     LightManager* light_manager;
     ContextSetting setting;
     explicit Context(WindowHandle* handle);
-    DrawCallData* current_render_pass();
-    int current_mesa_index() const;
     void get_screen_size(int& w, int& h) const;
     Camera* get_camera(int render_layer) const;
     void main_loop();
