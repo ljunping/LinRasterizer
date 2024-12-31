@@ -8,13 +8,11 @@
 
 void Transform::on_create()
 {
-    dirty_flag = 0;
     local_scale = Vec3::ONE;
     local_pos = Vec3::ZERO;
     parent = nullptr;
     auto ctx = get_current_ctx();
     ctx->transform_manager->on_create_obj(this);
-
 }
 
 void Transform::on_delete()

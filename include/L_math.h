@@ -374,6 +374,17 @@ namespace L_MATH
             return reinterpret_cast<const L_MATH::Vec<T, COL2>&>(*this);
         }
 
+        template<int COL2>
+        explicit operator const L_MATH::Vec<T, COL2>&() const
+        {
+            if constexpr (Col > 4 || COL2 > 4)
+            {
+                throw std::runtime_error("L_MATH::Vec constructor called with invalid arguments");
+            }
+            return reinterpret_cast<const L_MATH::Vec<T, COL2>&>(*this);
+        }
+
+
         Vec(const std::initializer_list<T>& list)
         {
             if constexpr (Col == 3)
@@ -433,7 +444,7 @@ namespace L_MATH
     template <typename T, int Row, int Col>
     class Mat
     {
-        Vec<T, MIN_RC<Row, 4>> data[MIN_RC<Col, 4>]{};
+        Vec<T, Row> data[MAX_RC<Col, 4>]{};
         void clear(T t)
         {
             for (int i = 0; i < Col; ++i)
@@ -468,7 +479,7 @@ namespace L_MATH
             //先填充列
             for (int i = 0; i < Col; ++i)
             {
-                data[i] = list.begin()[i];
+                data[i] = (list.begin()[i]);
             }
         }
 
@@ -512,7 +523,7 @@ namespace L_MATH
         }
 
         template<int ROW2,int COL2>
-        explicit operator L_MATH::Mat<T, ROW2, COL2>&() const
+        explicit operator L_MATH::Mat<T, ROW2, COL2>&()
         {
             if constexpr (ROW2 > 4 || COL2 > 4 || Row > 4 || Col > 4)
             {
@@ -850,10 +861,9 @@ namespace L_MATH
         auto c = cross(a, b);
         Mat<float, 3, 3> axis_rot = Mat<float, 3, 3>({a, b, c});
         Mat<float, 3, 3> rot_mat_base({1, 0, 0, 0, ::cos(x), ::sin(x), 0, -::sin(x), ::cos(x)});
-        auto rot_mat33 = axis_rot * rot_mat_base * axis_rot.transpose();
-        Mat<float, 4, 4> rot_mat44(Mat<float, 4, 4>::IDENTITY);
-        rot_mat44.copy_from(0, 0, rot_mat33);
-        return rot_mat44;
+        Mat<float, 3, 3> rot_mat33 = axis_rot * rot_mat_base * axis_rot.transpose();
+        rot_mat33[3][3] = 1;
+        return static_cast<L_MATH::Mat<float, 4, 4>&>(rot_mat33);
     }
 
     inline Mat<float, 4, 4> rotate(const Vec<float, 3>& from, const Vec<float, 3>& to)
@@ -861,20 +871,20 @@ namespace L_MATH
         auto left = from.normalize();
         auto _to = to.normalize();
         auto up_sn = cross(left, _to);
-        auto up = up_sn.normalize();
-        float sn = up_sn.magnitude();
-        auto forward = cross(left, up);
-        if (sn < EPSILON)
+        float _up_sn_l = up_sn.sqrt_magnitude();
+        if (_up_sn_l < EPSILON)
         {
             return Mat<float, 4, 4>::IDENTITY;
         }
-        float cs = dot(left, _to);
+        auto up = up_sn / _up_sn_l;
+        auto forward = cross(left, up);
+        float cs = dot(up, _to);
+        float sn = dot(forward, _to);
         Mat<float, 3, 3> axis_rot = Mat<float, 3, 3>({left, up, forward});
         Mat<float, 3, 3> rot_mat_base({1, 0, 0, 0, cs, sn, 0, -sn, cs});
         auto rot_mat_33 = axis_rot * rot_mat_base * axis_rot.transpose();
-        Mat<float, 4, 4> rot_mat_44 = Mat<float, 4, 4>::IDENTITY;
-        rot_mat_44.copy_from(0, 0, rot_mat_33);
-        return rot_mat_44;
+        rot_mat_33[3][3] = 1;
+        return static_cast<L_MATH::Mat<float, 4, 4>&>(rot_mat_33);
     }
 
 
@@ -923,17 +933,19 @@ namespace L_MATH
         left = left.normalize();
         up = cross(forward, left);
         auto mat_33 = Mat<float, 3, 3>({left, up, forward});
-        auto mat_44 = Mat<float, 4, 4>::IDENTITY;
-        mat_44.copy_from(0, 0, mat_33);
-        return mat_44.transpose();
+        mat_33 = mat_33.transpose();
+        return static_cast<Mat<float, 4, 4>&>(mat_33);
     }
 
     inline Mat<float, 4, 4> scale(const Vec3& __scale)
     {
         const Vec4& _scale = (const Vec4&)__scale;
-        auto mat = Mat<float, 4, 4>::IDENTITY * Mat<float, 4, 4>(_scale);
-        mat[3][3] = 1;
-        return mat;
+        Mat<float, 4, 4> result = Mat<float, 4, 4>::IDENTITY;
+        result[0][0]=_scale[0];
+        result[1][1]=_scale[1];
+        result[2][2]=_scale[2];
+        result[3][3] = 1;
+        return result;
     }
 
     

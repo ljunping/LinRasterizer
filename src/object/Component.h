@@ -11,7 +11,6 @@ class Transform;
 class Component : public Object
 {
     INIT_TYPE(Component, Object)
-
 public:
     Transform* scene_node{};
     ~Component() override = default;

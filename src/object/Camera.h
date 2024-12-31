@@ -7,22 +7,23 @@
 #include "Color.h"
 #include "Component.h"
 #include "FragShader.h"
+#include "Light.h"
 #include "L_math.h"
+struct GPUCmds;
 class Context;
 class TrianglePrimitive;
 
 #define GET_CAMERA(id) (Camera*)TypeFactory::get_type_inst_by_inst_id(id)
 
-class Camera : public Component
+class Camera : public DrawCallNodeComponent
 {
-    INIT_TYPE(Camera, Component)
-    bool is_proj;
+    INIT_TYPE(Camera, DrawCallNodeComponent)
+    bool is_proj{};
     void on_create() override;
     void on_delete() override;
     Camera(float near, float far, float fov, float ratio, bool isProj);
     Mat44 view_mat;
     Mat44 proj_mat;
-
 public:
     ~Camera() override;
     int w;
@@ -39,9 +40,8 @@ public:
     void update_view_mat() ;
     void update_proj_mat() ;
     bool is_render_layer(int sort_layer) const;
-    int clear(Context* ctx);
-}
-;
+    void collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds) override;
+};
 
 class CamaraManager : public ObjectManger<Camera>
 {
@@ -53,6 +53,7 @@ public:
             cameras.emplace_back(object);
         }
     }
+    Camera* get_camera(int render_layer);
 };
 
 

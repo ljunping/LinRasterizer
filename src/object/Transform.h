@@ -19,7 +19,6 @@ class Transform : public Object
 {
     INIT_TYPE(Transform, Object)
     Transform* parent{};
-    std::atomic<int> dirty_flag{};
     std::vector<Component*> components;
     std::vector<Transform*> children;
 public:

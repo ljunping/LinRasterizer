@@ -82,6 +82,14 @@ add_executable(LinRasterizer src/main.cpp
         src/object/VertShader.h
         src/DrawCallContext.cpp
         src/DrawCallContext.h
+        src/DrawCallSetting.h
+        src/GPU.cpp
+        src/GPU.h
+        src/object/DrawCallNodeComponent.cpp
+        src/object/DrawCallNodeComponent.h
+        src/MeshGenerator.h
+        src/MeshGenerator.cpp
+
 )
 target_include_directories(LinRasterizer PRIVATE ${X11_INCLUDE_DIR})
 target_include_directories(LinRasterizer PRIVATE ./include)

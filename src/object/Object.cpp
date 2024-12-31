@@ -19,7 +19,6 @@ int TypeFactory::objet_inst_id = 0;
 
 DEFINE_TYPE(Object)
 DEFINE_TYPE(Component)
-DEFINE_TYPE(RenderComponent)
 DEFINE_TYPE(Transform)
 DEFINE_TYPE(FragShader)
 DEFINE_TYPE(TextureFragShader)
@@ -33,11 +32,38 @@ DEFINE_TYPE(MeshProvider)
 DEFINE_TYPE(LightFragShader)
 DEFINE_TYPE(NormalTextureLightFragShader)
 DEFINE_TYPE(Light)
+DEFINE_TYPE(SpotLight)
+DEFINE_TYPE(DirectionalLight)
+DEFINE_TYPE(PointLight)
 DEFINE_TYPE(VertShader)
+DEFINE_TYPE(DrawCallNodeComponent)
+DEFINE_TYPE(RenderNodeComponent)
 
 
+int Object::register_type()
+{
+    return 0;
+}
 
+int Object::get_type_id()
+{return type_id;}
 
+int Object::get_instance_id() const
+{return instance_id;}
+
+int Object::inst_get_type_id()
+{return type_id;}
+
+Object* Object::create_Object()
+{
+    return new Object();
+}
+
+void Object::on_create()
+{}
+
+void Object::on_delete()
+{}
 
 int TypeFactory::get_parent_type(int type_id)
 {
@@ -47,6 +73,8 @@ int TypeFactory::get_parent_type(int type_id)
     }
     return 0;
 }
+
+
 
 bool TypeFactory::subclass(int parent_id, int child_type_id)
 {
@@ -86,7 +114,7 @@ void TypeFactory::RegisterTypes()
     REGISTER_TYPE(FragShader)
     REGISTER_TYPE(TextureFragShader)
     REGISTER_TYPE(Mesh)
-    REGISTER_TYPE(RenderComponent)
+    REGISTER_TYPE(RenderNodeComponent)
     REGISTER_TYPE(MeshRender)
     REGISTER_TYPE(Camera)
     REGISTER_TYPE(Texture)
@@ -95,8 +123,12 @@ void TypeFactory::RegisterTypes()
     REGISTER_TYPE(MeshProvider)
     REGISTER_TYPE(LightFragShader)
     REGISTER_TYPE(Light);
+    REGISTER_TYPE(SpotLight)
+    REGISTER_TYPE(PointLight)
+    REGISTER_TYPE(DirectionalLight)
     REGISTER_TYPE(NormalTextureLightFragShader)
     REGISTER_TYPE(VertShader)
+    REGISTER_TYPE(DrawCallNodeComponent)
 }
 
 

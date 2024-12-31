@@ -6,6 +6,7 @@
 #include "FragShader.h"
 #include "Light.h"
 #include "Material.h"
+#include "MeshGenerator.h"
 #include "MeshRender.h"
 #include "RasterizerJob.h"
 #include "Transform.h"
@@ -22,14 +23,16 @@ MeshRender* add_mesh_render(Transform* node,VertShader* vert_shader, FragShader*
                      Texture* texture,
                      int render_layer, bool transparent)
 {
+    auto _vert_shader = COPY_OBJECT(vert_shader);
+    auto _frag_shader = COPY_OBJECT(frag_shader);
     auto meshrender = node->add_component<MeshRender>();
-    meshrender->frag_shader = frag_shader->get_resource_id();
+    meshrender->frag_shader = _frag_shader->get_resource_id();
     meshrender->frame_buff_index = 0;
     meshrender->transparent = transparent;
     meshrender->render_layer = render_layer;
     meshrender->materials[0] = material->get_resource_id();
     meshrender->textures[0] = texture->get_resource_id();
-    meshrender->vert_shader = vert_shader->get_resource_id();
+    meshrender->vert_shader = _vert_shader->get_resource_id();
     return meshrender;
 }
 
@@ -71,7 +74,7 @@ int main()
     auto& setting = ctx->setting;
     setting.enable_ray_cast = false;
     setting.build_bvh = false;
-    setting.msaa_factor = 4;
+    setting.msaa_factor = 1;
     setting.enable_edge = false;
     setting.background_color = BLACK;
     setting.enable_mipmap = true;
@@ -99,8 +102,10 @@ int main()
     auto _text_frag_shader0 = Resource::get_or_create_resource<TextureFragShader>("TextureFragShader_Sphere.frag");
     auto _frag_shader0 = Resource::get_or_create_resource<FragShader>("FragShader_Sphere.frag");
     auto _lightFragShader0 = Resource::get_or_create_resource<LightFragShader>("LightFragShader.frag");
+
     auto _NormalTextureLightFragShader0 = Resource::get_or_create_resource<NormalTextureLightFragShader>(
         "NormalTextureLightFragShader.frag");
+
 
     auto vert_shader0 = Resource::get_or_create_resource<VertShader>("VertShader_Sphere.vert");
     auto texture0 = Resource::create_resource<Texture>("cat-7737618_1280.jpg", "cat-7737618_1280.jpg", true);
@@ -139,31 +144,35 @@ int main()
     _pig_mesh_provider->local_pos = {0, 0, -3};
     _pig_mesh_provider->local_euler_angles = {90, 90, 180};
     // _pig_mesh_provider->get_component<MeshProvider>()->locate_centroid(camera);
-    auto venti = Resource::create_resource<Mesh>("GenshinImpact_Venti/Avatar_Boy_Bow_Venti.fbx",
-                                                    "GenshinImpact_Venti/Avatar_Boy_Bow_Venti.fbx");
-    auto venti_node = create_mesh_provider(venti);
-    venti_node->local_scale*=0.001;
+    // auto venti = Resource::create_resource<Mesh>("GenshinImpact_Venti/Avatar_Boy_Bow_Venti.fbx",
+    //                                                 "GenshinImpact_Venti/Avatar_Boy_Bow_Venti.fbx");
+    // auto venti_node = create_mesh_provider(venti);
+    // venti_node->local_scale*=0.001;
     // venti_node->get_component<MeshProvider>()->locate_centroid(camera);
     //sphere
+    auto shadow_ts = CREATE_OBJECT_BY_TYPE(Transform);
     auto sphere_node = create_mesh_provider(generate_sphere(0.5, 30, 30));
-    sphere_node->local_pos = {0, 0, -2};
+    sphere_node->local_pos = {0, 0, 0};
     sphere_node->local_scale={1, 1, 1};
-
+    sphere_node->set_parent(shadow_ts);
     //quad
     auto quad_node = create_mesh_provider(generate_quad());
-    quad_node->local_euler_angles = {-0, 0, 0};
-    quad_node->local_pos = Vec3{0, 0, -1};
-    quad_node->local_scale={0.5, 0.5, 0.5};
+    quad_node->local_euler_angles = {-60, 0, 0};
+    quad_node->local_pos = Vec3{0, -0.5, 0};
+    quad_node->local_scale={3, 3, 3};
+    quad_node->set_parent(shadow_ts);
 
+    shadow_ts->local_pos = {0, 0, -2};
+    shadow_ts->local_scale = {0.5, 0.5, 0.5};
     auto quad_node2 = create_mesh_provider(generate_quad());
     quad_node2->local_euler_angles = {-0, 0, 0};
-    quad_node2->local_pos = Vec3{0.2f, 00, -1};
+    quad_node2->local_pos = Vec3{0.f, 00, -1};
     quad_node2->local_scale={1, 1, 1};
 
     auto tri_node = create_mesh_provider(generate_tri());
     tri_node->local_euler_angles = {-0, 0, 0};
-    tri_node->local_pos = Vec3{1.0f, 00, -2};
-    tri_node->local_scale={5, 5, 5};
+    tri_node->local_pos = Vec3{0.0f, -1, -2};
+    tri_node->local_scale={1, 1, 1};
 
     //vert_buff
     auto _vert_buff = create_mesh_provider(vert_buff());
@@ -171,17 +180,16 @@ int main()
     _vert_buff->local_scale = Vec3{0.25, 0.25, 0.25};
     _vert_buff->local_euler_angles = Vec3{50, 0, 0};
 
-    // add_mesh_render(quad_node2, _frag_shader0, _material0, texture, 1, true);
-    // add_mesh_render(sphere_node, _lightFragShader0, _light_material, texture, 1, false);
-    // add_mesh_render(quad_node, _lightFragShader0, _material2, texture, 1, true);
-    // add_mesh_render(tri_node, _lightFragShader0, _material0, texture, 1, false);
-    // add_mesh_render(venti_node, _lightFragShader0, _material0, texture, 1, false);
-
-    auto _pig_mesh_provider_mesh_render = add_mesh_render(_pig_mesh_provider, vert_shader0,
-                                                          _NormalTextureLightFragShader0, _light_material, texture2, 1,
-                                                          false);
-
-    _pig_mesh_provider_mesh_render->textures[1] = normal_texture0->get_resource_id();
+    // add_mesh_render(quad_node2, vert_shader0,_text_frag_shader0, _material0, texture0, 1, true);
+    // add_mesh_render(sphere_node, vert_shader0,_lightFragShader0, _light_material, texture0, 1, false);
+    add_mesh_render(quad_node,vert_shader0, _lightFragShader0, _light_material, texture1, 1, false);
+    // add_mesh_render(tri_node,vert_shader0, _lightFragShader0, _light_material, texture0, 1, true);
+    //
+    // auto _pig_mesh_provider_mesh_render = add_mesh_render(_pig_mesh_provider, vert_shader0,
+    //                                                       _NormalTextureLightFragShader0, _light_material, texture2, 1,
+    //                                                       false);
+    //
+    // _pig_mesh_provider_mesh_render->textures[1] = normal_texture0->get_resource_id();
     ctx->main_loop();
     return 0;
 }

@@ -8,6 +8,8 @@
 #include "RasterizerJob.h"
 #include "Transform.h"
 #include "DrawCallContext.h"
+#include "DrawCallSetting.h"
+#include "GPU.h"
 
 static void window_resize(Camera* camera)
 {
@@ -34,10 +36,13 @@ static void window_resize(EventParam& param, void* camera)
 }
 
 
-Camera::Camera(float near, float far, float fov, float ratio, bool isproj): Component(), near(near), far(far),
-                                                                            fov(fov), ratio(ratio), is_proj(isproj)
+Camera::Camera(float near, float far, float fov, float ratio, bool isproj):
+    near(near), far(far),
+    fov(fov), ratio(ratio), is_proj(isproj)
 {
 }
+
+
 
 Camera::~Camera()
 {
@@ -48,10 +53,9 @@ Camera::~Camera()
 
 void Camera::on_create()
 {
-    Component::on_create();
+    DrawCallNodeComponent::on_create();
     EventSystem::register_listener(WindowSizeChange, window_resize, (void*)this);
     EventSystem::register_listener(MSAAUpdate, window_resize, (void*)this);
-
     auto current_ctx = get_current_ctx();
     window_resize(this);
     current_ctx->camara_manager->on_create_obj(this);
@@ -63,7 +67,7 @@ void Camera::on_delete()
     current_ctx->camara_manager->on_delete_obj(this);
     EventSystem::unregister_listener(WindowSizeChange, window_resize, this);
     EventSystem::unregister_listener(MSAAUpdate, window_resize, (void*)this);
-    Component::on_delete();
+    DrawCallNodeComponent::on_delete();
 }
 
 
@@ -94,19 +98,76 @@ bool Camera::is_render_layer(int sort_layer) const
 {
     return this->render_layer & sort_layer;
 }
-
-int Camera::clear(Context* ctx)
+static bool compare_transparent_render_node(const RenderNode& a, const RenderNode& b)
+{
+    return a.model_matrix[3][2] < b.model_matrix[3][2];
+}
+void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
 {
     update_proj_mat();
     update_view_mat();
-    auto job_group = JOB_SYSTEM.create_job_group(0);
-
-    JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, w * h, new std::tuple<Context*, Camera*>(ctx, this)
-                          , clear_camera_execute, clear_camera_complete);
-    JOB_SYSTEM.submit_job_group(job_group);
-    return job_group;
+    auto ctx = get_current_ctx();
+    DrawCallContext draw_call_context{};
+    draw_call_context.fragment_map = this->fragment_map;
+    draw_call_context.depth_buff = this->depth_buff;
+    draw_call_context.frame_buff = ctx->get_frame_buffer(0);
+    draw_call_context.view_matrix = this->get_view_mat();
+    draw_call_context.proj_matrix = this->get_proj_mat();
+    draw_call_context.setting = ctx->setting;
+    draw_call_context.view_world_pos = this->scene_node->get_global_pos();
+    draw_call_context.setting.background_color = this->background_color;
+    if (this->solid_color)
+    {
+        d_cmds.emplace_back(draw_call_context, 3, CLEAR_FRAG, CLEAR_DEPTH, CLEAR_FRAME_BUFF);
+    }else
+    {
+        d_cmds.emplace_back(draw_call_context, 2, CLEAR_FRAG, CLEAR_DEPTH);
+    }
+    std::vector<RenderNode> render_nodes;
+    ctx->render_node_manager->collection_render_node(this, render_nodes, false);
+    if (!render_nodes.empty())
+    {
+        d_cmds.emplace_back(draw_call_context, DRAW);
+        std::ranges::sort(render_nodes, less_compare_render_node);
+        for (auto render_node : render_nodes)
+        {
+            if (!d_cmds.back().context.try_add_render_node(render_node))
+            {
+                d_cmds.emplace_back(draw_call_context, DRAW);
+                d_cmds.back().context.try_add_render_node(render_node);
+            }
+        }
+        render_nodes.clear();
+    }
+    ctx->render_node_manager->collection_render_node(this, render_nodes, true);
+    if (!render_nodes.empty())
+    {
+        std::ranges::sort(render_nodes, compare_transparent_render_node);
+        draw_call_context.setting.enable_depth_write = false;
+        for (auto render_node : render_nodes)
+        {
+            d_cmds.emplace_back(draw_call_context, DRAW);
+            d_cmds.back().context.try_add_render_node(render_node);
+        }
+    }
 }
+
+
+Camera* CamaraManager::get_camera(int render_layer)
+{
+    auto& cameras = this->get_objects();
+    for (auto camera : cameras)
+    {
+        if (camera->is_render_layer(render_layer))
+        {
+            return camera;
+        }
+    }
+    return nullptr;
+}
+
+
+
 
 
 

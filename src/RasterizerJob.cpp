@@ -43,18 +43,16 @@ void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end,  void* g
 
     DrawCallContext* draw_call = std::get<0>(draw_call_context_tuple);
     int msaa_index = std::get<1>(draw_call_context_tuple);
-    int w, h;
-    auto ctx = draw_call->ctx;
-    draw_call->ctx->get_screen_size(w, h);
+    int w = draw_call->w, h = draw_call->h;
     RayCasterResult result;
     for (int idx = data_begin; idx < data_end; idx++)
     {
         int i = idx / w, j = idx % w;
         float y,x;
         invert_view_transform(draw_call, msaa_index, w, h, j, i, x, y);
-        if (ctx->setting.build_bvh)
+        if (draw_call->setting.build_bvh)
         {
-            if (!ray_caster_bvh(draw_call->camera, draw_call->bvh_tree, x, y, &result))
+            if (!ray_caster_bvh(draw_call,draw_call->bvh_tree, x, y, &result))
             {
                 continue;
             }
@@ -77,37 +75,42 @@ void ray_cast_frag_complete(std::size_t data_begin,std::size_t data_end, void* g
     delete draw_call_context_tuple;
 }
 
-void clear_context_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
+
+
+void clear_frame_buff_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
 {
-    Context* ctx = (Context*)global_data;
-    auto frame_buff = ctx->get_frame_buffer(0);
+    DrawCallContext* ctx = (DrawCallContext*)global_data;
+    auto frame_buff = ctx->frame_buff;
     auto background_color = ctx->setting.background_color;
     for (int idx = data_begin; idx < data_end; idx++)
     {
         frame_buff[idx] = background_color;
     }
 }
-
-
-void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
+void clear_depth_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
 {
-    auto& tuple = *(std::tuple<Context*, Camera*>*)global_data;
-    auto ctx = std::get<0>(tuple);
-    int w, h;
-    ctx->get_screen_size(w, h);
-    auto camera = std::get<1>(tuple);
-    auto background_color = camera->background_color;
-    auto frame_buff = ctx->get_frame_buffer(0);
+    auto ctx = (DrawCallContext*)global_data;
+    int w = ctx->w;
+    int h = ctx->h;
     for (int idx = data_begin; idx < data_end; idx++)
     {
-        if (camera->solid_color)
-        {
-            frame_buff[idx] = background_color;
-        }
         for (int i = 0; i < ctx->setting.msaa_factor; ++i)
         {
-            auto& fragment = camera->fragment_map[idx + i * w * h];
-            camera->depth_buff[idx + i * w * h] = 1.f;
+            ctx->depth_buff[idx + i * w * h] = 1.f;
+        }
+    }
+}
+
+void clear_fragment_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
+{
+    auto ctx = (DrawCallContext*)global_data;
+    int w, h;
+    for (int idx = data_begin; idx < data_end; idx++)
+    {
+        for (int i = 0; i < ctx->setting.msaa_factor; ++i)
+        {
+            auto& fragment = ctx->fragment_map[idx + i * w * h];
+            ctx->depth_buff[idx + i * w * h] = 1.f;
             fragment.triangle = nullptr;
             fragment.triangle = nullptr;
             fragment.draw_call = nullptr;
@@ -122,17 +125,15 @@ void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* glo
 
 void clear_camera_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
-    auto tuple = (std::tuple<Context*, Camera*>*)global_data;
-    delete tuple;
+
 }
+
 void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     DrawCallContext* draw_call = (DrawCallContext*)global_data;
-    int w, h;
-    auto ctx = draw_call->ctx;
+    int w = draw_call->w, h = draw_call->h;
     auto frag_shader = draw_call->frag_shader;
     Color* frame_buff = draw_call->frame_buff;
-    ctx->get_screen_size(w, h);
     for (int idx = data_begin; idx < data_end; ++idx)
     {
         Vec4 frag_color;
@@ -141,9 +142,9 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
         Vec4 dts_color = v_color4(frame_buff[(h - i - 1) * w + j]);
         int sample_count = 0;
         bool is_run_frag = false;
-        for (int f = 0; f < ctx->setting.msaa_factor; ++f)
+        for (int f = 0; f < draw_call->setting.msaa_factor; ++f)
         {
-            auto& fragment = (draw_call->camera->fragment_map)[idx + f * w * h];
+            auto& fragment = (draw_call->fragment_map)[idx + f * w * h];
             if (fragment.draw_call != draw_call)
             {
                 continue;
@@ -152,7 +153,7 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
             if (tri)
             {
                 sample_count++;
-                if (ctx->setting.enable_edge)
+                if (draw_call->setting.enable_edge)
                 {
                     continue;
                 }
@@ -170,16 +171,16 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
         }
         if (sample_count <= 0)
             continue;
-        if (!ctx->setting.enable_edge)
+        if (!draw_call->setting.enable_edge)
         {
-            frag_color /= ctx->setting.msaa_factor;
+            frag_color /= draw_call->setting.msaa_factor;
             frame_buff[(h - i - 1) * w + j] = blend4(frag_color, dts_color, frag_color[3]);
         }
         else
         {
-            if (sample_count < ctx->setting.msaa_factor)
+            if (sample_count < draw_call->setting.msaa_factor)
             {
-                frame_buff[(h - i - 1) * w + j] = ctx->setting.edge_color;
+                frame_buff[(h - i - 1) * w + j] = draw_call->setting.edge_color;
             }
         }
     }
@@ -187,13 +188,12 @@ void run_frag_shader_execute(std::size_t data_begin,std::size_t data_end, void* 
 void interpolation_frag_output_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     DrawCallContext* draw_call = (DrawCallContext*)global_data;
-    int w, h;
-    draw_call->ctx->get_screen_size(w, h);
+    int w = draw_call->w, h = draw_call->h;
     for (int idx = data_begin; idx < data_end; ++idx)
     {
-        for (int i = 0; i < draw_call->ctx->setting.msaa_factor; ++i)
+        for (int i = 0; i < draw_call->setting.msaa_factor; ++i)
         {
-            auto fragment = &draw_call->camera->fragment_map[idx + i * w * h];
+            auto fragment = &draw_call->fragment_map[idx + i * w * h];
             auto tri = fragment->triangle;
             if (!tri || (fragment->draw_call != draw_call))
             {
@@ -290,127 +290,6 @@ void run_process_primitive(std::size_t data_begin,std::size_t data_end, void* gl
     }
 }
 
-Mesh* generate_sphere(float radius, int stacks, int slices)
-{
-    float* vert_buff = new float[8 * (stacks + 1) * (slices + 1)];
-
-    // Generate vertices
-    for (int stack = 0; stack < stacks; ++stack)
-    {
-        float phi = M_PI * stack / stacks; // Latitude angle (0 to π)
-        for (int slice = 0; slice <= slices; ++slice)
-        {
-            float theta = 2 * M_PI * slice / slices; // Longitude angle (0 to 2π)
-            float x = radius * sin(phi) * cos(theta);
-            float y = radius * sin(phi) * sin(theta);
-            float z = radius * cos(phi);
-            vert_buff[8 * (stack * (slices + 1) + slice)] = x;
-            vert_buff[8 * (stack * (slices + 1) + slice) + 1] = y;
-            vert_buff[8 * (stack * (slices + 1) + slice) + 2] = z;
-
-            vert_buff[8 * (stack * (slices + 1) + slice) + 3] = x;
-            vert_buff[8 * (stack * (slices + 1) + slice) + 4] = y;
-            vert_buff[8 * (stack * (slices + 1) + slice) + 5] = z;
-
-            vert_buff[8 * (stack * (slices + 1) + slice) + 6] = stack*1.0f / stacks;
-            vert_buff[8 * (stack * (slices + 1) + slice) + 7] = slice * 1.0f / slices;
-
-        }
-    }
-    SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 8 * (stacks + 1) * (slices + 1));
-    _Attributes->bind_attribute(POS,3, 0, 8);
-    _Attributes->bind_attribute(NORMAL,3, 3, 8);
-    _Attributes->bind_attribute(UV, 2, 6, 8);
-    std::vector<int> eb0;
-    // Generate triangles
-    for (int stack = 0; stack < stacks; ++stack)
-    {
-        for (int slice = 0; slice < slices; ++slice)
-        {
-            // Compute indices for the four vertices of the current quad
-            int i1 = stack * (slices + 1) + slice; // Top-left
-            int i2 = i1 + 1; // Top-right
-            int i3 = i1 + (slices + 1); // Bottom-left
-            int i4 = i3 + 1; // Bottom-right
-            // Two triangles per quad
-            if (stack != 0)
-            {
-                eb0.emplace_back(i1);
-                eb0.emplace_back(i3);
-                eb0.emplace_back(i2);
-            }
-            if (stack != stacks- 1)
-            {
-                eb0.emplace_back(i3);
-                eb0.emplace_back(i4);
-                eb0.emplace_back(i2);
-            }
-        }
-    }
-    _Attributes->ebo = std::move(eb0);
-    _Attributes->calculate_tangents();
-    return _Attributes;
-}
-
-
-
-Mesh* generate_quad()
-{
-    float* vert_buff = new float[4 * 8]
-    {
-        -0.5, -0.5, 0, 0, 0, 1, 0, 0,
-        0.5, -0.5, 0, 0, 0, 1, 1, 0,
-        -0.5, 0.5, 0, 0, 0, 1, 0, 1,
-        0.5, 0.5, 0, 0, 0, 1, 1, 1,
-    };
-
-    SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 4*8);
-    _Attributes->bind_attribute(POS,3, 0, 8);
-    _Attributes->bind_attribute(NORMAL,3, 3, 8);
-    _Attributes->bind_attribute(UV, 2, 6, 8);
-    _Attributes->ebo = {0, 1, 2, 1, 3, 2};
-    _Attributes->calculate_tangents();
-    return _Attributes;
-}
-
-Mesh* generate_tri()
-{
-    float* vert_buff = new float[4 * 8]
-    {
-        -0.5, -0.5, 0, 0, 0, 1, 0, 0,
-        0.5, -0.5, 0, 0, 0, 1, 1, 0,
-        -0.5, 0.5, 0, 0, 0, 1, 0, 1,
-        0.5, 0.5, 0, 0, 0, 1, 1, 1,
-    };
-
-    SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 4*8);
-    _Attributes->bind_attribute(POS,3, 0, 8);
-    _Attributes->bind_attribute(NORMAL,3, 3, 8);
-    _Attributes->bind_attribute(UV, 2, 6, 8);
-    _Attributes->ebo = {0, 1, 2};
-    _Attributes->calculate_tangents();
-    return _Attributes;
-}
-
-void draw_line(Context* ctx, Color* buff, void* data)
-{
-    int w, h;
-    ctx->get_screen_size(w, h);
-    auto line = (DrawLineInfo*)data;
-    auto bresenham_line = BresenhamLine(line->x0, line->y0, line->x1, line->y1);
-    int x, y, mx, my;
-    x = line->x0;
-    y = line->y0;
-    buff[y * w + x] = line->color;
-    while (bresenham_line.has_next())
-    {
-        bresenham_line.next_point(x, y, mx, my);
-        buff[y * w + x] = line->color;
-    }
-}
 
 
 
@@ -418,14 +297,13 @@ void view_transform(DrawCallContext* draw_call_context, int msaa_index, int w, i
                     int& j)
 {
     Vec2 offset;
-    Context* ctx = draw_call_context->ctx;
-    if (ctx->setting.enable_edge)
+    if (draw_call_context->setting.enable_edge)
     {
-        offset = edge_msaa_template(ctx->setting.msaa_factor, msaa_index);
+        offset = edge_msaa_template(draw_call_context->setting.msaa_factor, msaa_index);
     }
     else
     {
-        offset = msaa_template(ctx->setting.msaa_factor, msaa_index);
+        offset = msaa_template(draw_call_context->setting.msaa_factor, msaa_index);
     }
 
     float inv_w_minus_1 = 2.0f / (w - 1);
@@ -445,13 +323,12 @@ void view_transform(DrawCallContext* draw_call_context, int msaa_index, int w, i
 void invert_view_transform(DrawCallContext* call_context,int msaa_index,int w, int h, int i, int j, float& st_x, float& st_y)
 {
     Vec2 offset;
-    Context* ctx = call_context->ctx;
-    if(ctx->setting.enable_edge)
+    if(call_context->setting.enable_edge)
     {
-        offset = edge_msaa_template(ctx->setting.msaa_factor, msaa_index);
+        offset = edge_msaa_template(call_context->setting.msaa_factor, msaa_index);
     }else
     {
-        offset = msaa_template(ctx->setting.msaa_factor, msaa_index);
+        offset = msaa_template(call_context->setting.msaa_factor, msaa_index);
     }
     st_x = (i * 2 - (w - 1)) * 1.0 / (w - 1) + offset[0] * 2 / (w - 1);
     st_y = (j * 2 - (h - 1)) * 1.0 / (h - 1) + offset[1] * 2 / (h - 1);
@@ -481,36 +358,29 @@ void invert_view_transform(DrawCallContext* call_context,int msaa_index,int w, i
 
 bool add_fragment(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_index,const L_MATH::Vec<float, 3>& alpha, int i, int j)
 {
-    int w, h;
-    draw_call->ctx->get_screen_size(w, h);
+    int w = draw_call->w, h = draw_call->h;
     auto _index = i * w + j;
     if (_index < 0 || _index >= w * h)
     {
         return false;
     }
     int index = _index + w * h * msaa_index;
-
-    auto& fragment = draw_call->camera->fragment_map[index];
-    if (draw_call->ctx->setting.enable_depth)
+    auto& fragment = draw_call->fragment_map[index];
+    if (draw_call->setting.enable_depth)
     {
         auto st_z = tri.v[0][2] * alpha[0] + tri.v[1][2] * alpha[1] + tri.v[2][2] * alpha[2];
 
-        auto depth = draw_call->camera->depth_buff[index];
+        auto depth = draw_call->depth_buff[index];
         if (depth < st_z || (L_MATH::is_zero(depth - st_z)))
         {
             return false;
         }
-        if (draw_call->ctx->setting.enable_depth_write)
+        if (draw_call->setting.enable_depth_write)
         {
-            draw_call->camera->depth_buff[index] = st_z;
+            draw_call->depth_buff[index] = st_z;
         }
     }
     auto alpha_inv_w = 1 / L_MATH::dot(alpha, tri.inv_w);
-
-    if (isnan(tri.inv_w[0]) || isnan(tri.inv_w[1])|| isnan(tri.inv_w[2]))
-    {
-        DEBUG_VAR
-    }
     auto real_z = -1 * alpha_inv_w;
     fragment.triangle = &tri;
     fragment.frag_coord = Vec3{(float)j, (float)i, real_z};
@@ -563,7 +433,7 @@ bool ray_caster(DrawCallContext* draw_call, float si, float sj, RayCasterResult*
     return _is_ray_caster;
 }
 
-bool ray_caster_bvh(Camera* camera,BVHTree* bvh_tree,float si, float sj, RayCasterResult* result)
+bool ray_caster_bvh(DrawCallContext* ctx,BVHTree* bvh_tree,float si, float sj, RayCasterResult* result)
 {
     Vec3 sv = Vec3({si, sj, -1});
     float min_z = 1;
@@ -596,7 +466,7 @@ bool ray_caster_bvh(Camera* camera,BVHTree* bvh_tree,float si, float sj, RayCast
     return _is_ray_caster;
 }
 
-bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* bvh_tree, float si, float sj, RayCasterResult* result)
+bool ray_caster_bvh_priqueue(DrawCallContext* ctx, BVHTree* bvh_tree, float si, float sj, RayCasterResult* result)
 {
     Vec3 sv = Vec3({si, sj, -1});
     bool _is_ray_caster = false;
@@ -635,9 +505,7 @@ void rast_huge_tri(TrianglePrimitive& tri, Context* ctx)
 
 void rast_tri(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_index)
 {
-    int w,h;
-    auto ctx = draw_call->ctx;
-    ctx->get_screen_size(w, h);
+    int w = draw_call->w, h = draw_call->h;
     tri.clip();
     auto vert_count = tri.clip_vert_count;
     auto clip_vertices = tri.clip_vertices;

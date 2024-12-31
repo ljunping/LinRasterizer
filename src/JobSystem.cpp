@@ -127,6 +127,11 @@ void JobSystem::finish_job_group(int job_group_id)
     {
         return;
     }
+    auto job_group = job_groups[job_group_id];
+    if (job_group->complete)
+    {
+        job_group->complete(job_group->data_begin, job_group->data_end, job_group->global_data);
+    }
     auto& next_job_groups = job_group_map[job_group_id];
     for (int next_job_group : next_job_groups)
     {
@@ -135,11 +140,7 @@ void JobSystem::finish_job_group(int job_group_id)
             dispatch_job_group(job_groups[next_job_group]);
         }
     }
-    auto job_group = job_groups[job_group_id];
-    if (job_group->complete)
-    {
-        job_group->complete(job_group->data_begin, job_group->data_end, job_group->global_data);
-    }
+
     job_group_map.erase(job_group_id);
     job_groups.erase(job_group_id);
     depend_group_count_map.erase(job_group_id);

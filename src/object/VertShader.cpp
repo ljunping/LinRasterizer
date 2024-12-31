@@ -12,7 +12,7 @@
 
 void VertShader::run(DrawCallContext* context,int vert_index)
 {
-    Vec3 camera_pos = context->camera->scene_node->get_global_pos();
+    Vec3 view_pos = context->view_world_pos;
     auto fix_outputs = context->outputs[vert_index].fix_outputs;
     auto& tbn_light_dirs = context->outputs[vert_index].tbn_light_dirs;
     auto& view_light_dirs = context->outputs[vert_index].view_light_dirs;
@@ -23,15 +23,15 @@ void VertShader::run(DrawCallContext* context,int vert_index)
     int mesh_index = 0;
     auto mesh = context->get_mesh(vert_index, mesh_index);
     Mat44 model_mat;
-    const Mat44& view_mat = context->camera->get_view_mat();
-    const Mat44& projection_mat = context->camera->get_proj_mat();
+    const Mat44& view_mat = context->view_matrix;
+    const Mat44& projection_mat = context->proj_matrix;
     context->get_model_matrix(mesh, model_mat);
     Vec3 pos, normal;
     mesh->get_attribute_value(mesh_index, POS, pos);
     mesh->get_attribute_value(mesh_index, NORMAL, normal);
 
     L_MATH::pos3_l_dot_mat44(pos, model_mat);
-    Vec3 view_dir = camera_pos - pos;
+    Vec3 view_dir = view_pos - pos;
     L_MATH::pos3_l_dot_mat33(normal, model_mat);
 
     L_MATH::pos3_l_dot_mat44(pos, view_mat);

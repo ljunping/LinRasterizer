@@ -81,7 +81,7 @@ Texture::~Texture()
 
 void Texture::texture_raw(int x, int y, const unsigned char *&result)
 {
-    int index = std::max(std::min(y * width + x, width * height - 1), 0) * this->channels;
+    int index = std::max(std::min((height - y) * width + x, width * height - 1), 0) * this->channels;
     result = (data.get() + index);
 }
 
@@ -175,7 +175,7 @@ void Texture::texture_mipmap_magnify_linear(const L_MATH::Vec<float, 2>& uv, int
 {
     if(level==0)
     {
-        texture_mipmap_minify(uv, level, result);
+        texture_mipmap_minify_linear(uv, level, result);
         return;
     }
     auto height = mip_maps[0].height << level;
@@ -334,8 +334,8 @@ void Texture::sample_linear(const L_MATH::Vec<float, 2>& uv, float lod, unsigned
         float alpha = lod - l;
         auto tx1 = new unsigned char[this->channels];
         auto tx2 = new unsigned char[this->channels];
-        texture_mipmap_magnify(uv, l, tx1);
-        texture_mipmap_magnify(uv, l + 1, tx2);
+        texture_mipmap_magnify_linear(uv, l, tx1);
+        texture_mipmap_magnify_linear(uv, l + 1, tx2);
         for (int i = 0; i < channels; ++i)
         {
             result[i] = tx1[i] * (1 - alpha) + tx2[i] * alpha;

@@ -8,8 +8,11 @@
 #include <vector>
 #include "Color.h"
 #include "CommonMacro.h"
+#include "DrawCallSetting.h"
 #include "L_math.h"
 
+struct Fragment;
+class Light;
 struct VertexInterpolation;
 class Mesh;
 class BVHTree;
@@ -59,43 +62,37 @@ public:
 class DrawCallContext
 {
 private:
-    bool is_render_job_finish(int job_group_id) const;
-    int frame_begin_job_id = 0;
-    int frame_cur_max_job_id = 0;
-    void update_frame_job_id(int job_group_id);
+    friend class GPU;
 public:
-    VertexOutput* outputs;
-    RenderNode pass_node{};
-    Context* ctx{};
-    bool is_init = false;
+    int w, h;
+    Fragment* fragment_map{};
+    float* depth_buff{};
+    Color* frame_buff{};
+    Context* ctx;
+    DrawCallContextSetting setting;
+    VertexOutput* outputs{};
+    RenderNode render_node{};
+    bool is_set_render_node = false;
     std::vector<std::pair<Mesh*,Mat44>> meshes;
+    Mat44 proj_matrix;
+    Mat44 view_matrix;
+    Vec3 view_world_pos;
     std::vector<TrianglePrimitive*> primitives;
     Material* materials[MAX_MATERIAL_COUNT]{};
     Texture* textures[MAX_TEXTURES_COUNT]{};
     FragShader* frag_shader{};
     VertShader* vert_shader{};
-    Color* frame_buff{};
     BVHTree* bvh_tree{};
-    Camera* camera{};
     TrianglePrimitive* tri_pool{};
     int gl_position_count = 0;
     Vec4* gl_positions{};
     bool try_add_render_node(RenderNode& node);
-    void init(const RenderNode& node);
+    void set_render_node(const RenderNode& node);
     ~DrawCallContext();
     void assign_triangle_primitives(int size);
-    void build_bvh_tree();
     void get_model_matrix(Mesh* mesh, L_MATH::Mat<float, 4, 4>& m) const;
-    int run_frag_shader();
-    void run_vert_shader();
-    void process_primitives();
-    void draw_begin();
-    void draw_end();
-    int ray_cast_scene(int msaa_index);
     Mesh* get_mesh(int vert_index, int& mesh_index) const;
     int get_muti_mesh_vert_index(const Mesh* mesh, int mesh_index) const;
-    int raster_scene(int msaa_index);
-    void wait_finish() const;
     void generate_triangle_primitive(TrianglePrimitive& tri);
     template<int N>
     void get_vert_attribute_value(Mesh*, int vert_index, int attribute_index, L_MATH::Vec<float, N>& result);

@@ -39,7 +39,6 @@ public:
     Fragment* fragment_map{};
     int width{}, height{};
     DrawCallContext* draw_call = nullptr;
-    Context* ctx = nullptr;
     void begin_draw_call(DrawCallContext* pass);
     void end_draw_call(DrawCallContext* pass);
     virtual Vec4 run(int frag_index);
@@ -103,7 +102,7 @@ void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_M
 {
     auto size = width * height;
     int msaa_index = frag_index_l / (size);
-    if (ctx->setting.msaa_factor <= msaa_index)
+    if (draw_call->setting.msaa_factor <= msaa_index)
     {
         return;
     }

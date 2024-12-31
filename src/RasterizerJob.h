@@ -41,8 +41,8 @@ void invert_view_transform(DrawCallContext* draw_call_context, int msaa_index, i
 bool add_fragment(TrianglePrimitive& tri,DrawCallContext* ctx,int msaa_index,const L_MATH::Vec<float, 3>& alpha, int i, int j);
 
 bool ray_caster(DrawCallContext* ctx,  float si, float sj, RayCasterResult* result);
-bool ray_caster_bvh(Camera* camera, BVHTree* tree, float si, float sj, RayCasterResult* result);
-bool ray_caster_bvh_priqueue(Camera* camera, BVHTree* tree, float si, float sj, RayCasterResult* result);
+bool ray_caster_bvh(DrawCallContext* ctx,BVHTree* tree, float si, float sj, RayCasterResult* result);
+bool ray_caster_bvh_priqueue(DrawCallContext* ctx, BVHTree* tree, float si, float sj, RayCasterResult* result);
 
 void rast_tri(TrianglePrimitive& tri, DrawCallContext* ctx,int msaa_index);
 void rast_huge_tri(TrianglePrimitive& tri, DrawCallContext* ctx);
@@ -52,8 +52,10 @@ void rast_huge_tri(TrianglePrimitive& tri, DrawCallContext* ctx);
 void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
 void ray_cast_frag_complete(std::size_t data_begin,std::size_t data_end, void* global_data);
 
-void clear_camera_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
-void clear_context_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
+void clear_depth_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
+
+void clear_fragment_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
+void clear_frame_buff_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
 
 void clear_camera_complete(std::size_t data_begin,std::size_t data_end, void* global_data);
 
@@ -74,18 +76,7 @@ void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* glob
 
 void run_process_primitive(std::size_t data_begin,std::size_t data_end, void* global_data);
 
-Mesh* generate_sphere(float radius, int stacks, int slices);
 
-Mesh* generate_quad();
 
-Mesh* generate_tri();
-
-struct DrawLineInfo
-{
-    int x0, y0, x1, y1;
-    Color color;
-};
-
-void draw_line(Context* ctx, Color* buff, void* data);
 
 #endif //RASTERIZERJOB_H

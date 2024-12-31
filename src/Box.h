@@ -10,7 +10,6 @@
 #include "JobSystem.h"
 
 class TrianglePrimitive;
-
 struct RayCasterResult
 {
     TrianglePrimitive* triangle;
@@ -26,6 +25,7 @@ class alignas(16) Box
 public:
     L_MATH::Vec<float, N> min;
     L_MATH::Vec<float, N> max;
+    L_MATH::Vec<float, N> center();
     Box();
     explicit Box(const L_MATH::Vec<float, N>& p);
 

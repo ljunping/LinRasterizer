@@ -11,10 +11,6 @@
 #include "Transform.h"
 #include "DrawCallContext.h"
 
-static bool compare_transparent_render_node(const RenderNode& a, const RenderNode& b)
-{
-    return a.model_matrix[3][2] < b.model_matrix[3][2];
-}
 
 static bool less_compare_array(const int* a, const int* b, int count)
 {
@@ -55,16 +51,16 @@ bool equal_compare_render_node(const RenderNode& a, const RenderNode& b)
 
 
 
-void RenderComponent::on_create()
+void RenderNodeComponent::on_create()
 {
     this->Component::on_create();
-    get_current_ctx()->render_manager->on_create_obj(this);
+    get_current_ctx()->render_node_manager->on_create_obj(this);
 }
 
-void RenderComponent::on_delete()
+void RenderNodeComponent::on_delete()
 {
     this->Component::on_delete();
-    get_current_ctx()->render_manager->on_delete_obj(this);
+    get_current_ctx()->render_node_manager->on_delete_obj(this);
 }
 
 
@@ -93,6 +89,21 @@ void MeshProvider::locate_centroid(Camera* camera) const
     this->scene_node->set_local_to_global_mat(_locate_mat);
 }
 
+Mesh* MeshProvider::get_mesh() const
+{
+    return Resource::get_resource<Mesh>(mesh_id);
+}
+
+
+Mesh* MeshRender::get_mesh()
+{
+    auto mesh_provider = scene_node->get_component<MeshProvider>();
+    if (mesh_provider)
+    {
+        return mesh_provider->get_mesh();
+    }
+    return nullptr;
+}
 
 void MeshRender::collect_render_node(Camera* camera,std::vector<RenderNode>& render_nodes)
 {
@@ -120,7 +131,8 @@ void MeshRender::collect_render_node(Camera* camera,std::vector<RenderNode>& ren
     }
 }
 
-void RenderManager::collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes, bool transparent)
+
+void RenderNodeManager::collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes, bool transparent)
 {
     for (auto object : objects)
     {
@@ -131,41 +143,6 @@ void RenderManager::collection_render_node(Camera* camera, std::vector<RenderNod
     }
 }
 
-
-void RenderManager::calculate_render_pass(Camera* camera, std::vector<DrawCallContext>& render_passes,bool transparent)
-{
-    std::vector<RenderNode> render_nodes;
-    collection_render_node(camera, render_nodes, transparent);
-    if (render_nodes.empty())
-    {
-        return;
-    }
-    if (!transparent)
-    {
-        render_passes.emplace_back();
-        std::ranges::sort(render_nodes, less_compare_render_node);
-        for (auto render_node : render_nodes)
-        {
-            if (!render_passes.back().try_add_render_node(render_node))
-            {
-                render_passes.emplace_back();
-                render_passes.back().try_add_render_node(render_node);
-            }
-        }
-    }else
-    {
-        std::ranges::sort(render_nodes, compare_transparent_render_node);
-        render_passes.emplace_back();
-        for (auto render_node : render_nodes)
-        {
-            if (render_passes.back().try_add_render_node(render_node))
-            {
-                render_passes.emplace_back();
-            }
-        }
-    }
-
-}
 
 
 

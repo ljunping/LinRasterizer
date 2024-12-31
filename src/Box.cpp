@@ -7,6 +7,12 @@ static int intersect_traverse_count = 0;
 
 
 template <int N>
+L_MATH::Vec<float, N> Box<N>::center()
+{
+    return (min + max) * 0.5f;
+}
+
+template <int N>
 Box<N>::Box()
 {
     min = L_MATH::Vec<float, N>(INFINITY);

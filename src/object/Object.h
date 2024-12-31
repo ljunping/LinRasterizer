@@ -6,8 +6,11 @@
 #define TYPE_H
 
 #define CREATE_SHARE_OBJECT_BY_TYPE(Type,...) (TypeFactory::create_share_type_inst<Type>(__VA_ARGS__))
+
 #define CREATE_OBJECT_BY_TYPE(Type,...) (TypeFactory::create_type_inst<Type>(__VA_ARGS__))
 #define CREATE_OBJECT(type_id) (TypeFactory::create_type_inst_by_id(type_id))
+#define COPY_OBJECT(obj) (TypeFactory::copy_object(obj))
+
 #define GET_OBJECT(inst_id) ((TypeFactory::get_type_inst_by_inst_id(inst_id)))
 #define GET_TYPE_OBJECT(type,inst_id) ((type*)(TypeFactory::get_type_inst_by_inst_id(inst_id)))
 #define DESTROY_OBJECT(inst) (TypeFactory::destroy_type_inst(inst))
@@ -29,8 +32,13 @@ private:\
         auto obj=new type_name();\
         return obj;\
     };\
+    void clone(Object* dst) override { (*( type_name*)(dst))=(*this); }\
 protected:\
-type_name():base_type(){};\
+    type_name():base_type(){};\
+    type_name(const type_name&) = default;\
+    type_name(type_name&&) = default;\
+    type_name& operator=(const type_name&) = default;\
+    type_name& operator=(type_name&&) = default;\
 
 #define REGISTER_TYPE(type_name)\
 type_name::type_id = TypeFactory::register_type<type_name>();\
@@ -41,6 +49,7 @@ int type_name::type_id = 0;
 
 #include <unordered_map>
 #include "CommonMacro.h"
+#include "debug.h"
 #include "VectorRemoveEasy.h"
 
 class Object
@@ -49,26 +58,25 @@ class Object
 private:
     static int type_id;
     int instance_id;
-    static int register_type()
+    static int register_type();
+    virtual void clone(Object* dst)
     {
-        return 0;
+        (*dst) = *this;
     }
+protected:
+    Object(const Object&) = default;
+    Object(Object&&) = default;
+    Object& operator=(const Object&) = default;
+    Object& operator=(Object&&) = default;
 public:
-    Object(const Object&) = delete;
-    Object(Object&&) = delete;
-    Object& operator=(const Object&) = delete;
-    Object& operator=(Object&&) = delete;
-    static int get_type_id(){return type_id;};
-    int get_instance_id() const {return instance_id;};
-    virtual int inst_get_type_id(){return type_id;};\
-    static Object* create_Object()\
-    {
-        return new Object();
-    }
+    static int get_type_id();
+    int get_instance_id() const;
+    virtual int inst_get_type_id();
+    static Object* create_Object();
     Object() = default;
     virtual ~Object() = default;
-    virtual void on_create(){};
-    virtual void on_delete(){};
+    virtual void on_create();
+    virtual void on_delete();
 };
 
 class TypeFactory
@@ -87,6 +95,8 @@ public:
     static std::shared_ptr<T> create_share_type_inst(Args&&... args);
 
     static int get_parent_type(int type_id);
+    template<class T>
+    static T* copy_object(T* obj);
 
     static bool subclass(int parent_id,int child_type_id);
 
@@ -118,6 +128,16 @@ SHARE_PTR<T> TypeFactory::create_share_type_inst(Args&&... args)
     auto obj = create_type_inst<T>(std::forward<Args>(args)...);
     return SHARE_PTR<T>(obj,TypeFactory::destroy_type_inst);
 }
+template <class T>
+T* TypeFactory::copy_object(T* obj)
+{
+    Object* inst = CREATE_OBJECT(obj->inst_get_type_id());
+    auto instance_id = inst->instance_id;
+    obj->clone(inst);
+    inst->instance_id = instance_id;
+    return static_cast<T*>(inst);
+}
+
 
 template <class T>
 int TypeFactory::register_type()

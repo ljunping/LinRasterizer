@@ -7,18 +7,18 @@
 #include "Camera.h"
 #include "DrawCallContext.h"
 #include "EventSystem.h"
+#include "GPU.h"
 #include "Light.h"
 #include "MeshRender.h"
 #include "RasterizerJob.h"
 #include "Transform.h"
 
 
-
 const int target_fps = 60; // 目标帧率
 const int frame_duration = 1000 / target_fps; // 每帧持续时间（毫秒）
 Context* current_context;
 
-Context::Context(WindowHandle* handle): window_handle(handle), transform_manager(nullptr), render_manager(nullptr),
+Context::Context(WindowHandle* handle): window_handle(handle), transform_manager(nullptr), render_node_manager(nullptr),
                                         component_update_manager(nullptr), camara_manager(nullptr)
 {
 
@@ -27,7 +27,7 @@ Context::Context(WindowHandle* handle): window_handle(handle), transform_manager
 void Context::init()
 {
     transform_manager = new TransformManager();
-    render_manager = new RenderManager();
+    render_node_manager = new RenderNodeManager();
     component_update_manager = new ComponentUpdateManager();
     camara_manager = new CamaraManager();
     light_manager = new LightManager();
@@ -69,22 +69,18 @@ void Context::get_screen_size(int& w, int& h) const
     h = this->window_handle->h;
 }
 
-Camera* Context::get_camera(int render_layer) const
-{
-    auto& cameras = camara_manager->get_objects();
-    for (auto camera : cameras)
-    {
-        if (camera->is_render_layer(render_layer))
-        {
-            return camera;
-        }
-    }
-    return nullptr;
-}
 
-void Context::render()
+void Context::render_scene()
 {
-    clear_color();
+    std::vector<GPUCmds> cmds;
+    DrawCallContext context;
+    context.setting = setting;
+    context.frame_buff = get_frame_buffer(0);
+    cmds.emplace_back(context, CLEAR_FRAME_BUFF);
+    for (auto object : light_manager->get_objects())
+    {
+        object->collect_draw_call_cmds(cmds);
+    }
     std::vector<Camera*> cameras;
     camara_manager->get_cameras(cameras);
     std::sort(cameras.begin(), cameras.end(), [](Camera* a, Camera* b)
@@ -93,48 +89,25 @@ void Context::render()
     });
     for (auto camera : cameras)
     {
-        render_camera(camera);
+        camera->collect_draw_call_cmds(cmds);
     }
+    GPU::begin();
+    for (auto& cmd : cmds)
+    {
+        set_draw_call_parameters(cmd.context);
+        GPU::run(cmd);
+    }
+    GPU::end();
     render_after_scene(this->get_frame_buffer(0));
     this->window_handle->draw_frame_buff();
 }
 
-void Context::render_camera(Camera* camera)
+void Context::set_draw_call_parameters(DrawCallContext& draw_call_context)
 {
-    JOB_SYSTEM.wait_job_group_finish(camera->clear(this));
-    draw_calls.clear();
-    bool _enable_depth_write = setting.enable_depth_write;
-    this->render_manager->calculate_render_pass(camera, draw_calls, false);
-    int un_transparent_index = draw_calls.size();
-    this->render_manager->calculate_render_pass(camera, draw_calls, true);
-    for (int i = 0; i < draw_calls.size(); ++i)
-    {
-        auto& draw_call = this->draw_calls[i];
-        draw_call.draw_begin();
-        draw_call.run_vert_shader();
-        draw_call.process_primitives();
-        if (i >= un_transparent_index)
-        {
-            draw_call.wait_finish();
-            setting.enable_depth_write = false;
-        }
-        for (int j = 0; j < this->setting.msaa_factor; ++j)
-        {
-            if (!this->setting.enable_ray_cast)
-            {
-                draw_call.raster_scene(j);
-            }
-            else
-            {
-                draw_call.ray_cast_scene(j);
-            }
-        }
-        draw_call.run_frag_shader();
-        draw_call.draw_end();
-
-    }
-    setting.enable_depth_write = _enable_depth_write;
+    draw_call_context.ctx = this;
+    get_screen_size(draw_call_context.w, draw_call_context.h);
 }
+
 
 void Context::main_loop()
 {
@@ -151,7 +124,7 @@ void Context::main_loop()
         window_handle->event_loop();
         check_setting_change();
         update_scene(t);
-        render();
+        render_scene();
         // 计算渲染时间并休眠以限制帧率
         if (t < frame_duration)
         {
@@ -173,19 +146,8 @@ void Context::render_after_scene(Color* buff)
         auto data = std::get<1>(after_scene_render_func);
         func(this, buff, data);
     }
-
 }
 
-void Context::clear_color()
-{
-    auto job_group = JOB_SYSTEM.create_job_group(0);
-    JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, this->window_handle->w * this->window_handle->h,
-                          this, clear_context_execute, default_complete);
-
-    JOB_SYSTEM.submit_job_group(job_group);
-    JOB_SYSTEM.wait_job_group_finish(job_group);
-}
 
 void Context::register_after_scene_render_func(void(* func)(Context* ctx, Color* buff, void* data), void* data)
 {

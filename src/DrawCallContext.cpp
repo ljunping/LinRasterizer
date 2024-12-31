@@ -12,11 +12,25 @@
 #include "TrianglePrimitive.h"
 #include "VertShader.h"
 #include "CommonMacro.h"
+#include "Light.h"
+#include "Transform.h"
+
+
+void DrawCallContext::generate_triangle_primitive(TrianglePrimitive& tri)
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        auto vert_index = this->get_muti_mesh_vert_index(tri.mesh, tri.vert_index[i]);
+        Vec4& v = static_cast<L_MATH::Vec<float, 4>&>(tri.v[i]);
+        v = this->gl_positions[vert_index];
+    }
+    tri.update_param();
+}
 
 bool DrawCallContext::try_add_render_node(RenderNode& node)
 {
-    init(node);
-    if (!equal_compare_render_node(node, pass_node))
+    set_render_node(node);
+    if (!equal_compare_render_node(node, render_node))
     {
         return false;
     }
@@ -29,13 +43,12 @@ bool DrawCallContext::try_add_render_node(RenderNode& node)
     return true;
 }
 
-void DrawCallContext::init(const RenderNode& node)
+void DrawCallContext::set_render_node(const RenderNode& node)
 {
-    if (!is_init)
+    if (!is_set_render_node)
     {
-        is_init = true;
-        pass_node = node;
-        this->ctx = get_current_ctx();
+        is_set_render_node = true;
+        render_node = node;
         for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
         {
             this->materials[i] = Resource::get_resource<Material>(node.materials[i]);
@@ -46,8 +59,6 @@ void DrawCallContext::init(const RenderNode& node)
         }
         this->frag_shader = Resource::get_resource<FragShader>(node.frag_shader);
         this->vert_shader = Resource::get_resource<VertShader>(node.vert_shader);
-        this->frame_buff = ctx->get_frame_buffer(node.frame_buff_index);
-        this->camera = pass_node.camera;
     }
 }
 
@@ -69,11 +80,6 @@ void DrawCallContext::assign_triangle_primitives(int size)
     }
 }
 
-void DrawCallContext::build_bvh_tree()
-{
-    this->bvh_tree = new BVHTree();
-    this->bvh_tree->build(this->primitives);
-}
 
 
 void DrawCallContext::get_model_matrix(Mesh* mesh, L_MATH::Mat<float, 4, 4>& m) const
@@ -90,54 +96,14 @@ void DrawCallContext::get_model_matrix(Mesh* mesh, L_MATH::Mat<float, 4, 4>& m) 
 
 
 
-void DrawCallContext::run_vert_shader()
-{
-    int vert_count = 0;
-    for (int i = 0; i < meshes.size(); ++i)
-    {
-        auto mesh = meshes[i].first;
-        vert_count += mesh->vert_count;
-    }
-    if (vert_count != gl_position_count)
-    {
-        gl_position_count = vert_count;
-        free(this->gl_positions);
-        gl_positions = static_cast<L_MATH::Vec<float, 4>*>(malloc(sizeof(Vec4) * vert_count));
-        outputs = static_cast<VertexOutput*>(malloc(sizeof(VertexOutput) * vert_count));
-    }
-    auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
-    JOB_SYSTEM.alloc_jobs(job_group,
-                          0,
-                          0,
-                          vert_count,
-                          this,
-                          run_vert_shader_execute,
-                          default_complete);
-    JOB_SYSTEM.submit_job_group(job_group);
-    update_frame_job_id(job_group);
-}
 
-
-int DrawCallContext::ray_cast_scene(int msaa_index)
-{
-    int w, h;
-    auto data = new std::tuple<DrawCallContext*, int>(this, msaa_index);
-    ctx->get_screen_size(w, h);
-    auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
-    JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, w * h,
-                          data, ray_cast_frag_execute, ray_cast_frag_complete);
-    JOB_SYSTEM.submit_job_group(job_group);
-    update_frame_job_id(job_group);
-    return job_group;
-}
 
 Mesh* DrawCallContext::get_mesh(int vert_index,int& mesh_index) const
 {
     for (auto mesh : meshes)
     {
         mesh_index = vert_index;
-        if (mesh.first->vert_count >= vert_index)
+        if (mesh.first->vert_count > vert_index)
         {
             return mesh.first;
         }
@@ -158,139 +124,12 @@ int DrawCallContext::get_muti_mesh_vert_index(const Mesh* mesh, int mesh_index) 
         else
         {
             vert_index += mesh_index;
+            break;
         }
     }
     return vert_index;
 }
 
-int DrawCallContext::run_frag_shader()
-{
-    this->frag_shader->begin_draw_call(this);
-    int w, h;
-    ctx->get_screen_size(w, h);
-    auto prepare_fence = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
-    JOB_SYSTEM.alloc_jobs(prepare_fence, 0,
-                          0, w * h,
-                          this, interpolation_frag_output_execute, default_complete);
-
-    JOB_SYSTEM.submit_job_group(prepare_fence);
-
-    auto clear_vert_output = JOB_SYSTEM.create_job_group(prepare_fence);
-    JOB_SYSTEM.alloc_jobs(clear_vert_output, 0,
-                          0, this->gl_position_count,
-                          this, clear_vert_output_execute, default_complete);
-
-    JOB_SYSTEM.submit_job_group(clear_vert_output);
-
-
-    auto job_group = JOB_SYSTEM.create_job_group(clear_vert_output);
-    JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, w * h,
-                          this, run_frag_shader_execute, run_frag_shader_complete);
-
-    JOB_SYSTEM.submit_job_group(job_group);
-    update_frame_job_id(job_group);
-    return job_group;
-}
-
-
-int DrawCallContext::raster_scene(int msaa_index)
-{
-    auto data = new std::tuple<DrawCallContext*, int>(this, msaa_index);
-    auto tri_count = this->primitives.size();
-    if (tri_count == 0)
-    {
-        return 0;
-    }
-    auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
-    JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, this->primitives.size(),
-                          data, rast_tri_execute, rast_tri_complete);
-    JOB_SYSTEM.submit_job_group(job_group);
-    update_frame_job_id(job_group);
-    return job_group;
-}
-
-void DrawCallContext::wait_finish() const
-{
-    JOB_SYSTEM.wait_job_group_finish(frame_cur_max_job_id);
-}
-
-void DrawCallContext::generate_triangle_primitive(TrianglePrimitive& tri)
-{
-    for (int i = 0; i < 3; ++i)
-    {
-        auto vert_index = get_muti_mesh_vert_index(tri.mesh, tri.vert_index[i]);
-        Vec4& v = static_cast<L_MATH::Vec<float, 4>&>(tri.v[i]);
-        v = gl_positions[vert_index];
-    }
-    tri.update_param();
-}
-
-
-
-bool DrawCallContext::is_render_job_finish(int job_group_id) const
-{
-    if (job_group_id < frame_begin_job_id)
-    {
-        return true;
-    }
-    if (job_group_id > frame_cur_max_job_id)
-    {
-        return false;
-    }
-    return JOB_SYSTEM.is_job_group_finish(job_group_id);
-}
-
-
-void DrawCallContext::update_frame_job_id(int job_group_id)
-{
-    if (frame_begin_job_id == 0)
-    {
-        frame_begin_job_id = job_group_id;
-        frame_cur_max_job_id = job_group_id;
-    }
-    frame_cur_max_job_id = std::max(frame_cur_max_job_id, job_group_id);
-}
-
-void DrawCallContext::draw_begin()
-{
-    frame_cur_max_job_id = 0;
-    frame_begin_job_id = 0;
-}
-
-void DrawCallContext::draw_end()
-{
-    wait_finish();
-}
-
-void DrawCallContext::process_primitives()
-{
-    std::vector<std::tuple<DrawCallContext*,Mat44>> data(meshes.size());
-
-    int pri_size = 0;
-    for (int i = 0; i < meshes.size(); ++i)
-    {
-        auto& mesh =  meshes[i].first;
-        pri_size += mesh->tri_count();
-    }
-    this->assign_triangle_primitives(pri_size);
-    auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
-    JOB_SYSTEM.alloc_jobs(job_group,
-                          0,
-                          0,
-                          pri_size,
-                          this,
-                          run_process_primitive,
-                          default_complete);
-    JOB_SYSTEM.submit_job_group(job_group);
-    update_frame_job_id(job_group);
-    if (this->ctx->setting.build_bvh)
-    {
-        wait_finish();
-        this->build_bvh_tree();
-    }
-}
 
 
 template void DrawCallContext::get_vert_attribute_value(Mesh*,int vert_index, int attribute_index,
