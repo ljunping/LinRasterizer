@@ -15,8 +15,15 @@ class VertShader : public Resource
 {
     INIT_TYPE(VertShader, Resource)
 public:
-    void run(DrawCallContext* context, int vert_index);
+    virtual void run(DrawCallContext* context, int vert_index);
 };
+
+class LightShadowMapVertShader : public VertShader
+{
+    INIT_TYPE(LightShadowMapVertShader, VertShader)
+    void run(DrawCallContext* context, int vert_index) override;
+}
+;
 
 
 

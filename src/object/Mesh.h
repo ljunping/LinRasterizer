@@ -5,7 +5,7 @@
 #ifndef ATTRIBUTE_H
 #define ATTRIBUTE_H
 #pragma once
-#include "Box.h"
+#include "Geometry.h"
 #include "L_math.h"
 #include "Object.h"
 #include "Resource.h"
@@ -29,19 +29,18 @@ class Mesh : public Resource
     INIT_TYPE(Mesh, Resource)
     Mesh(SHARE_PTR<float[]>& vbo, int count);
     explicit Mesh(const char* obj_file_name);
-    Vec3 centroid;
     Box<3> box;
-    bool is_centroid = false;
     bool is_generate_box = false;
 public:
     int id = 0;
     void on_create() override;
+    void locate_zero();
     std::vector<int> ebo;
     AttributeDataFormat data_formats[AttributeTypeCount]{};
     SHARE_PTR<float[]> vbo;
-    int data_size;
-    int vert_count;
-    int vert_data_length;
+    int data_size{};
+    int vert_count{};
+    int vert_data_length{};
     std::vector<Vec3> tangents;
     ~Mesh();
     void bind_attribute(AttributeType type, int attr_unit_size, int offset, int stride);

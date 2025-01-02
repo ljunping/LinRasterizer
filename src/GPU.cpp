@@ -4,9 +4,11 @@
 
 #include "GPU.h"
 
-#include "Box.h"
+#include "BVHTree.h"
+#include "Geometry.h"
 #include "DrawCallContext.h"
 #include "FragShader.h"
+#include "JobSystem.h"
 #include "RasterizerJob.h"
 
 
@@ -76,16 +78,19 @@ int GPU::run_frag_shader(DrawCallContext* dc)
                           dc, interpolation_frag_output_execute, default_complete);
 
     JOB_SYSTEM.submit_job_group(prepare_fence);
+    int pre_fence = prepare_fence;
+    if (dc->setting.enable_light_interpolation)
+    {
+        auto clear_vert_output = JOB_SYSTEM.create_job_group(prepare_fence);
+        JOB_SYSTEM.alloc_jobs(clear_vert_output, 0,
+                              0, dc->gl_position_count,
+                              dc, clear_vert_output_execute, default_complete);
 
-    auto clear_vert_output = JOB_SYSTEM.create_job_group(prepare_fence);
-    JOB_SYSTEM.alloc_jobs(clear_vert_output, 0,
-                          0, dc->gl_position_count,
-                          dc, clear_vert_output_execute, default_complete);
+        JOB_SYSTEM.submit_job_group(clear_vert_output);
+        pre_fence = clear_vert_output;
+    }
 
-    JOB_SYSTEM.submit_job_group(clear_vert_output);
-
-
-    auto job_group = JOB_SYSTEM.create_job_group(clear_vert_output);
+    auto job_group = JOB_SYSTEM.create_job_group(pre_fence);
     JOB_SYSTEM.alloc_jobs(job_group, 0,
                           0, dc->w * dc->h,
                           dc, run_frag_shader_execute, run_frag_shader_complete);
@@ -163,7 +168,7 @@ void GPU::process_primitives(DrawCallContext* dc)
                           default_complete);
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);
-    if (dc->setting.build_bvh)
+    if (dc->setting.build_bvh && dc->bvh_tree == nullptr)
     {
         wait_finish();
         build_bvh_tree(dc);
@@ -201,11 +206,10 @@ void GPU::run_vert_shader(DrawCallContext* dc)
 
 int GPU::ray_cast_scene(DrawCallContext* dc,int msaa_index)
 {
-    int w, h;
     auto data = new std::tuple<DrawCallContext*, int>(dc, msaa_index);
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, w * h,
+                          0, dc->w * dc->h,
                           data, ray_cast_frag_execute, ray_cast_frag_complete);
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);

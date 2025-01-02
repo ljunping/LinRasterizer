@@ -10,6 +10,7 @@
 #include "Context.h"
 #include "Transform.h"
 #include "DrawCallContext.h"
+#include "VertShader.h"
 
 
 static bool less_compare_array(const int* a, const int* b, int count)
@@ -75,12 +76,11 @@ void MeshProvider::locate_centroid(Camera* camera) const
     auto mesh_centroid = mesh->get_mesh_centroid();
     Box<3> box = mesh->get_box();
     auto vp = camera->get_view_mat();
-    Mat44 vp_inv;
-    L_MATH::inverse(vp, vp_inv);
-    Vec4 target_proj_center = {0, 0, -2 * camera->near, 1};
+    Mat44 vp_inv = L_MATH::inverse(vp);
+    Vec4 target_proj_center = {0, 0, -2 * camera->view_frustum.near, 1};
     Vec3 target_world_center = Vec3((vp_inv * target_proj_center)[0]);
 
-    auto _tar_l = camera->near * tan(L_MATH::deg2rad(camera->fov / 2));
+    auto _tar_l = camera->view_frustum.near * tan(L_MATH::deg2rad(camera->view_frustum.fov / 2));
     auto _offset = (box.max - box.min);
     float scale = _tar_l * 2 / _offset[1];
 
@@ -143,9 +143,33 @@ void RenderNodeManager::collection_render_node(Camera* camera, std::vector<Rende
     }
 }
 
+MeshRender* add_mesh_render(Transform* node, VertShader* vert_shader, FragShader* frag_shader, Material* material,
+    Texture* texture, int render_layer, bool transparent)
+{
+    auto _vert_shader = COPY_OBJECT(vert_shader);
+    auto _frag_shader = COPY_OBJECT(frag_shader);
+    auto meshrender = node->add_component<MeshRender>();
+    meshrender->frag_shader = _frag_shader->get_resource_id();
+    meshrender->frame_buff_index = 0;
+    meshrender->transparent = transparent;
+    meshrender->render_layer = render_layer;
+    meshrender->materials[0] = material->get_resource_id();
+    meshrender->textures[0] = texture->get_resource_id();
+    meshrender->vert_shader = _vert_shader->get_resource_id();
+    return meshrender;
+}
 
 
 
+
+Transform* create_mesh_provider(Mesh* mesh)
+{
+    //mesh
+    auto node = CREATE_OBJECT_BY_TYPE(Transform);
+    auto mesh_provider = node->add_component<MeshProvider>();
+    mesh_provider->mesh_id = mesh->get_resource_id();
+    return node;
+}
 
 
 

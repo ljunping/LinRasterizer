@@ -11,8 +11,6 @@
 #include "Color.h"
 #include "DrawCallSetting.h"
 
-struct GPUCmd;
-class DrawCallNodeManager;
 class Light;
 class LightManager;
 class CamaraManager;
@@ -43,14 +41,14 @@ class Context
     void render_after_scene(Color* buff);
     std::vector<std::tuple<void(*)(Context* context, Color* buff, void* data), void*>> after_scene_render_funcs;
     DrawCallContextSetting compare_setting;
-    WindowHandle* window_handle;
+    WindowHandle* window_handle{};
     void init();
 public:
-    TransformManager* transform_manager;
-    RenderNodeManager* render_node_manager;
-    CamaraManager* camara_manager;
-    ComponentUpdateManager* component_update_manager;
-    LightManager* light_manager;
+    TransformManager* transform_manager{};
+    RenderNodeManager* render_node_manager{};
+    CamaraManager* camara_manager{};
+    ComponentUpdateManager* component_update_manager{};
+    LightManager* light_manager{};
     DrawCallContextSetting setting;
     explicit Context(WindowHandle* handle);
     void get_screen_size(int& w, int& h) const;

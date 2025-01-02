@@ -21,7 +21,7 @@ public:
         return false;
     };
 
-    virtual void update(float time)
+    virtual void update(float delta_time)
     {
     };
 };

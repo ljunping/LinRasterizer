@@ -16,7 +16,7 @@
 
 const int target_fps = 60; // 目标帧率
 const int frame_duration = 1000 / target_fps; // 每帧持续时间（毫秒）
-Context* current_context;
+Context* current_context{};
 
 Context::Context(WindowHandle* handle): window_handle(handle), transform_manager(nullptr), render_node_manager(nullptr),
                                         component_update_manager(nullptr), camara_manager(nullptr)
@@ -77,10 +77,7 @@ void Context::render_scene()
     context.setting = setting;
     context.frame_buff = get_frame_buffer(0);
     cmds.emplace_back(context, CLEAR_FRAME_BUFF);
-    for (auto object : light_manager->get_objects())
-    {
-        object->collect_draw_call_cmds(cmds);
-    }
+
     std::vector<Camera*> cameras;
     camara_manager->get_cameras(cameras);
     std::sort(cameras.begin(), cameras.end(), [](Camera* a, Camera* b)
@@ -89,6 +86,10 @@ void Context::render_scene()
     });
     for (auto camera : cameras)
     {
+        for (auto object : light_manager->get_objects())
+        {
+            object->collect_draw_call_cmds(camera, cmds);
+        }
         camera->collect_draw_call_cmds(cmds);
     }
     GPU::begin();

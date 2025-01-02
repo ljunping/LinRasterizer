@@ -1,45 +1,24 @@
 //
-// Created by Lin on 2024/11/14.
+// Created by Lin on 2025/1/1.
 //
 
-#ifndef Box_H
-#define Box_H
-#include"L_math.h"
-#include <queue>
+#ifndef BVHTREE_H
+#define BVHTREE_H
+#include <vector>
 
-#include "JobSystem.h"
+#include "Geometry.h"
+#include "L_math.h"
 
-class TrianglePrimitive;
+struct TrianglePrimitive;
+
 struct RayCasterResult
 {
     TrianglePrimitive* triangle;
     Vec3 alpha;
     float t;
 };
-template<int N>
-class alignas(16) Box;
 
-template<int N>
-class alignas(16) Box
-{
-public:
-    L_MATH::Vec<float, N> min;
-    L_MATH::Vec<float, N> max;
-    L_MATH::Vec<float, N> center();
-    Box();
-    explicit Box(const L_MATH::Vec<float, N>& p);
-
-    Box(const L_MATH::Vec<float, N>& p, const L_MATH::Vec<float, N>& q);
-
-    void expand(const L_MATH::Vec<float, N>& v);
-    void expand(const Box<N>& v);
-    template <int M>
-    bool inside(const L_MATH::Vec<float, N>& point) const;
-    bool intersect( const L_MATH::Vec<float, N>& origin,const L_MATH::Vec<float, N>& dir,  float& tMin, float& tMax) const;
-};
-
-
-
+struct TrianglePrimitive;
 
 struct BVHNode {
     Box<3> aabb;
@@ -85,4 +64,7 @@ public:
                                     float (*geometrie_distance)(RayCasterResult* result));
 };
 
-#endif //Box_H
+
+
+
+#endif //BVHTREE_H

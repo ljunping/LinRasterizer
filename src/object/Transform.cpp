@@ -58,8 +58,7 @@ void Transform::set_local_to_global_mat(const L_MATH::Mat<float, 4, 4>& rts)
         set_local_to_parent_mat(rts);
     }
     auto to_global_mat = this->parent->get_local_to_global_mat();
-    Mat44 inv_local_to_parent_mat;
-    L_MATH::invert_trs_mat(to_global_mat, inv_local_to_parent_mat);
+    Mat44 inv_local_to_parent_mat = L_MATH::invert_trs_mat(to_global_mat);
     set_local_to_parent_mat(inv_local_to_parent_mat * rts);
 }
 
@@ -137,7 +136,7 @@ L_MATH::Vec<float, 3> Transform::get_global_pos()
     return result;
 }
 
-Transform* Transform::get_parent()
+Transform* Transform::get_parent() const
 {
     return parent;
 }

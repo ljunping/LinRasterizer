@@ -26,6 +26,7 @@ class Camera;
 
 enum VertOutPutType
 {
+    WORLD_POS,
     VIEW_POS,
     VIEW_NORMAL,
     VIEW_VIEW_DIR,
@@ -64,11 +65,12 @@ class DrawCallContext
 private:
     friend class GPU;
 public:
-    int w, h;
+    int w{}, h{};
     Fragment* fragment_map{};
+    Camera* camera{};
     float* depth_buff{};
     Color* frame_buff{};
-    Context* ctx;
+    Context* ctx{};
     DrawCallContextSetting setting;
     VertexOutput* outputs{};
     RenderNode render_node{};
@@ -90,13 +92,12 @@ public:
     void set_render_node(const RenderNode& node);
     ~DrawCallContext();
     void assign_triangle_primitives(int size);
-    void get_model_matrix(Mesh* mesh, L_MATH::Mat<float, 4, 4>& m) const;
+    L_MATH::Mat<float, 4, 4> get_model_matrix(Mesh* mesh) const;
     Mesh* get_mesh(int vert_index, int& mesh_index) const;
     int get_muti_mesh_vert_index(const Mesh* mesh, int mesh_index) const;
     void generate_triangle_primitive(TrianglePrimitive& tri);
     template<int N>
     void get_vert_attribute_value(Mesh*, int vert_index, int attribute_index, L_MATH::Vec<float, N>& result);
-
     void create_vert_attribute(Mesh* mesh, int v0, int v1, int v2,
                                const L_MATH::Vec<float, 3>& alpha, VertexInterpolation& result);
 

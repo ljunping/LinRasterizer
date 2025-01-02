@@ -15,8 +15,8 @@ set(TARGET_DIR ${CMAKE_BINARY_DIR})
 # 添加编译器选项，针对 Debug 定义 DEBUG 宏
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_definitions(DEBUG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -g")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -g")
+#    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -g")
+#    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -g")
 endif()
 
 # 添加编译器选项，针对 Debug 定义 DEBUG 宏
@@ -32,11 +32,12 @@ add_executable(LinRasterizer src/main.cpp
 #        ${LUA_SOURCES_C}
 #        ${LUA_SOURCES_HEADER}
         include/stb_image.h
+        include/stb_image_write.h
         include/L_math.h
         src/WindowHandle.cpp
         src/WindowHandle.h
-        src/Box.cpp
-        src/Box.h
+        src/Geometry.cpp
+        src/Geometry.h
         src/TrianglePrimitive.cpp
         src/TrianglePrimitive.h
         src/object/Camera.cpp
@@ -89,6 +90,10 @@ add_executable(LinRasterizer src/main.cpp
         src/object/DrawCallNodeComponent.h
         src/MeshGenerator.h
         src/MeshGenerator.cpp
+        src/BVHTree.cpp
+        src/BVHTree.h
+        src/ImageUtil.cpp
+        src/ImageUtil.h
 
 )
 target_include_directories(LinRasterizer PRIVATE ${X11_INCLUDE_DIR})

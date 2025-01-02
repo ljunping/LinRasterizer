@@ -26,6 +26,7 @@ Mesh::~Mesh()
 Mesh::Mesh(std::shared_ptr<float[]>& vbo, int count): vbo(vbo), data_size(count)
 {
 }
+int _VALUE=0;
 //只加载第一个mesh,一般只有一个
 Mesh::Mesh(const char* obj_file_name)
 {
@@ -137,26 +138,32 @@ Mesh::Mesh(const char* obj_file_name)
                                      attribute_data_format.offset, offset);
 
         }
+
+        this->locate_zero();
+        calculate_tangents();
         break;
 
     }
-    auto mesh_centroid = this->get_mesh_centroid();
-    auto offset = data_formats[POS].offset;
-    for (int i = 0; i < vert_count; ++i)
-    {
-        (vbo.get() + i * vert_data_length)[offset] -= mesh_centroid[0];
-        (vbo.get() + i * vert_data_length)[offset + 1] -= mesh_centroid[1];
-        (vbo.get() + i * vert_data_length)[offset+2] -= mesh_centroid[2];
-    }
-    this->centroid = Vec3::ZERO;
-    calculate_tangents();
+
 }
 
 void Mesh::on_create()
 {
     this->id = ++_id;
 }
+void Mesh::locate_zero()
+{
+    auto mesh_centroid = this->get_mesh_centroid();
+    auto _offset = data_formats[POS].offset;
+    for (int i = 0; i < vert_count; ++i)
+    {
 
+        (vbo.get() + i * vert_data_length)[_offset] -= mesh_centroid[0];
+        (vbo.get() + i * vert_data_length)[_offset + 1] -= mesh_centroid[1];
+        (vbo.get() + i * vert_data_length)[_offset + 2] -= mesh_centroid[2];
+    }
+    is_generate_box = false;
+}
 
 
 void Mesh::bind_attribute(AttributeType type, int attr_unit_size, int offset, int stride)
@@ -211,19 +218,7 @@ float* Mesh::operator[](int vert_index) const
 
 L_MATH::Vec<float, 3> Mesh::get_mesh_centroid()
 {
-    if (is_centroid)
-    {
-        return centroid;
-    }
-    is_centroid = true;
-    Vec3 pos;
-    for (int i = 0; i < vert_count; ++i)
-    {
-        this->get_attribute_value(i, POS, pos);
-        centroid += pos;
-    }
-    centroid /= vert_count;
-    return centroid;
+    return this->get_box().center();
 }
 
 void Mesh::calculate_tangents()
@@ -305,12 +300,11 @@ Box<3> Mesh::get_box()
         return this->box;
     }
     Box<3> box;
-    for (int i = 0; i < tri_count(); ++i)
+    for (int i = 0; i < vert_count; ++i)
     {
-        TrianglePrimitive triangle;
-        this->generate_triangle(triangle, i);
-        triangle.update_param();
-        box.expand(triangle.box);
+        Vec3 pos;
+        this->get_attribute_value(i, POS, pos);
+        box.expand(pos);
     }
     this->box = box;
     this->is_generate_box = true;

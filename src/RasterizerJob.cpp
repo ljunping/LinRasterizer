@@ -3,6 +3,7 @@
 //
 #include "RasterizerJob.h"
 #include "BresenhamLine.h"
+#include "BVHTree.h"
 #include "Camera.h"
 #include "PODPool.h"
 #include "FragShader.h"
@@ -104,14 +105,14 @@ void clear_depth_execute(std::size_t data_begin, std::size_t data_end, void* glo
 void clear_fragment_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     auto ctx = (DrawCallContext*)global_data;
-    int w, h;
+    int w = ctx->w;
+    int h = ctx->h;
     for (int idx = data_begin; idx < data_end; idx++)
     {
         for (int i = 0; i < ctx->setting.msaa_factor; ++i)
         {
             auto& fragment = ctx->fragment_map[idx + i * w * h];
             ctx->depth_buff[idx + i * w * h] = 1.f;
-            fragment.triangle = nullptr;
             fragment.triangle = nullptr;
             fragment.draw_call = nullptr;
             if (!fragment.build_interpolation_data)
@@ -383,7 +384,7 @@ bool add_fragment(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_in
     auto alpha_inv_w = 1 / L_MATH::dot(alpha, tri.inv_w);
     auto real_z = -1 * alpha_inv_w;
     fragment.triangle = &tri;
-    fragment.frag_coord = Vec3{(float)j, (float)i, real_z};
+    fragment.frag_coord = Vec3{(float)j, (float)i, real_z,};
     fragment.alpha =  alpha * tri.inv_w * alpha_inv_w;
     fragment.resolution[0] = w;
     fragment.draw_call = draw_call;
@@ -441,7 +442,7 @@ bool ray_caster_bvh(DrawCallContext* ctx,BVHTree* bvh_tree,float si, float sj, R
     std::vector<RayCasterResult> ray_casters;
     if (bvh_tree->intersect_traverse(sv, L_MATH::FORWARD, ray_casters))
     {
-        for (auto ray_caster : ray_casters)
+        for (auto& ray_caster : ray_casters)
         {
             auto& triangle = *ray_caster.triangle;
             if (triangle.discard)

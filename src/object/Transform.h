@@ -38,7 +38,7 @@ public:
     Mat44 get_local_to_parent_mat() const;
     void set_local_to_global_mat(const L_MATH::Mat<float, 4, 4>& mat);
     void set_local_to_parent_mat(const L_MATH::Mat<float, 4, 4>& mat);
-    Transform* get_parent();
+    Transform* get_parent() const;
     Component* add_component(int component_type);
     void remove_component(Component* c);
     void remove_component(int component_type);

@@ -4,10 +4,9 @@
 
 #include "Texture.h"
 
+#include "ImageUtil.h"
 #include "JobSystem.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 
 static void execute_init_lay0_mipmap(size_t begin, size_t end, void *global)
 {
@@ -288,21 +287,33 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, const Vec2 &lodv, unsigned
 
 Texture::Texture(const char* fileName,bool generate_mipmap)
 {
-    int width;
-    int height;
-    int channels;
-    unsigned char* imageData = stbi_load(fileName, &width, &height, &channels, 0);
-    if (!imageData)
+    auto load_image = ImageUtil::load_image(fileName);
+    int width = load_image.width;
+    int height = load_image.height;
+    int channels = load_image.channels;
+    if (!load_image.data)
     {
         printf("Failed to load texture %s\n", fileName);
     }
-    SHARE_PTR<unsigned char[]> data(imageData, [](unsigned char *ptr)
+    SHARE_PTR<unsigned char[]> data(load_image.data, [](unsigned char* ptr)
     {
-        stbi_image_free(ptr);
+        ImageUtil::destroy_image(ptr);
     });
     this->height = height;
     this->width = width;
     this->channels = channels;
+    this->data = data;
+    if(generate_mipmap)
+    {
+        this->generate_mipmaps();
+    }
+}
+
+Texture::Texture(std::shared_ptr<unsigned char[]>& data,int w,int h,int channel, bool generate_mipmap)
+{
+    this->height = h;
+    this->width = w;
+    this->channels = channel;
     this->data = data;
     if(generate_mipmap)
     {
@@ -319,8 +330,8 @@ void Texture::sample_linear(const L_MATH::Vec<float, 2>& uv, float lod, unsigned
         float alpha = lod - l;
         auto tx1 = new unsigned char[this->channels];
         auto tx2 = new unsigned char[this->channels];
-        texture_mipmap_minify(uv, l, tx1);
-        texture_mipmap_minify(uv, l + 1, tx2);
+        texture_mipmap_magnify_linear(uv, l, tx1);
+        texture_mipmap_magnify_linear(uv, l + 1, tx2);
         for (int i = 0; i < channels; ++i)
         {
             result[i] = tx1[i] * (1 - alpha) + tx2[i] * alpha;

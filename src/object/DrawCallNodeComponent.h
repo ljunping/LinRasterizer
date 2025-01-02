@@ -5,6 +5,7 @@
 #ifndef DRAWCALLNODECOMPONENT_H
 #define DRAWCALLNODECOMPONENT_H
 #include "Component.h"
+class Camera;
 struct GPUCmds;
 class DrawCallContext;
 
@@ -17,6 +18,11 @@ public:
 
     virtual void collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
     {
+    };
+
+    virtual void collect_draw_call_cmds(Camera* camera, std::vector<GPUCmds>& d_cmds)
+    {
+
     };
 }
 ;

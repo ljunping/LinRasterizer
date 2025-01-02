@@ -3,7 +3,9 @@
 //
 
 #include "DrawCallContext.h"
-#include "Box.h"
+
+#include "BVHTree.h"
+#include "Geometry.h"
 #include "Camera.h"
 #include "Context.h"
 #include "FragShader.h"
@@ -82,20 +84,17 @@ void DrawCallContext::assign_triangle_primitives(int size)
 
 
 
-void DrawCallContext::get_model_matrix(Mesh* mesh, L_MATH::Mat<float, 4, 4>& m) const
+Mat44 DrawCallContext::get_model_matrix(Mesh* mesh) const
 {
     for (auto _mesh : meshes)
     {
         if (_mesh.first == mesh)
         {
-            m = _mesh.second;
-            return;
+            return _mesh.second;
         }
     }
+    return L_MATH::Mat<float, 4, 4>::IDENTITY;
 }
-
-
-
 
 
 Mesh* DrawCallContext::get_mesh(int vert_index,int& mesh_index) const
@@ -219,30 +218,35 @@ void VertexInterpolation::calculate_values()
     auto& vertex_output1 = draw_call_context->outputs[v[1]].fix_outputs;
     auto& vertex_output2 = draw_call_context->outputs[v[2]].fix_outputs;
 
-    auto& tbn_light_dirs0 = draw_call_context->outputs[v[0]].tbn_light_dirs;
-    auto& tbn_light_dirs1 = draw_call_context->outputs[v[1]].tbn_light_dirs;
-    auto& tbn_light_dirs2 = draw_call_context->outputs[v[2]].tbn_light_dirs;
-
-    auto& view_light_dirs0 = draw_call_context->outputs[v[0]].view_light_dirs;
-    auto& view_light_dirs1 = draw_call_context->outputs[v[1]].view_light_dirs;
-    auto& view_light_dirs2 = draw_call_context->outputs[v[2]].view_light_dirs;
-
-    output.tbn_light_dirs.resize(tbn_light_dirs0.size());
-    output.view_light_dirs.resize(view_light_dirs0.size());
-
     for (int i = 0; i < VertOutPutTypeCount; ++i)
     {
         output.fix_outputs[i] = vertex_output0[i] * alpha[0] + vertex_output1[i] * alpha[1] + vertex_output2[i] * alpha[2];
     }
-    for (int i = 0; i < output.tbn_light_dirs.size(); ++i)
+    if (this->draw_call_context->setting.enable_light_interpolation)
     {
-        output.tbn_light_dirs[i]=
-            tbn_light_dirs0[i] * alpha[0] + tbn_light_dirs1[i] * alpha[1] + tbn_light_dirs2[i] * alpha[2];
-    }
-    for (int i = 0; i < output.view_light_dirs.size(); ++i)
-    {
-        output.view_light_dirs[i] =
-            view_light_dirs0[i] * alpha[0] + view_light_dirs1[i] * alpha[1] + view_light_dirs2[i] * alpha[2];
 
+        auto& tbn_light_dirs0 = draw_call_context->outputs[v[0]].tbn_light_dirs;
+        auto& tbn_light_dirs1 = draw_call_context->outputs[v[1]].tbn_light_dirs;
+        auto& tbn_light_dirs2 = draw_call_context->outputs[v[2]].tbn_light_dirs;
+
+        auto& view_light_dirs0 = draw_call_context->outputs[v[0]].view_light_dirs;
+        auto& view_light_dirs1 = draw_call_context->outputs[v[1]].view_light_dirs;
+        auto& view_light_dirs2 = draw_call_context->outputs[v[2]].view_light_dirs;
+        output.tbn_light_dirs.resize(tbn_light_dirs0.size());
+        output.view_light_dirs.resize(view_light_dirs0.size());
+
+
+        for (int i = 0; i < output.tbn_light_dirs.size(); ++i)
+        {
+            output.tbn_light_dirs[i]=
+                tbn_light_dirs0[i] * alpha[0] + tbn_light_dirs1[i] * alpha[1] + tbn_light_dirs2[i] * alpha[2];
+        }
+        for (int i = 0; i < output.view_light_dirs.size(); ++i)
+        {
+            output.view_light_dirs[i] =
+                view_light_dirs0[i] * alpha[0] + view_light_dirs1[i] * alpha[1] + view_light_dirs2[i] * alpha[2];
+
+        }
     }
+
 }

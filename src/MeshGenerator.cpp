@@ -21,13 +21,14 @@ void draw_line(Context* ctx, Color* buff, void* data)
         buff[y * w + x] = line->color;
     }
 }
-
+float __VALUE=0;
 Mesh* generate_sphere(float radius, int stacks, int slices)
 {
     float* vert_buff = new float[8 * (stacks + 1) * (slices + 1)];
 
+    int index = 0;
     // Generate vertices
-    for (int stack = 0; stack < stacks; ++stack)
+    for (int stack = 0; stack <= stacks; ++stack)
     {
         float phi = M_PI * stack / stacks; // Latitude angle (0 to π)
         for (int slice = 0; slice <= slices; ++slice)
@@ -46,6 +47,7 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
 
             vert_buff[8 * (stack * (slices + 1) + slice) + 6] = stack*1.0f / stacks;
             vert_buff[8 * (stack * (slices + 1) + slice) + 7] = slice * 1.0f / slices;
+            index++;
 
         }
     }
@@ -65,7 +67,7 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
             int i2 = i1 + 1; // Top-right
             int i3 = i1 + (slices + 1); // Bottom-left
             int i4 = i3 + 1; // Bottom-right
-            // Two triangles per quad
+            // Two triangles per quadi
             if (stack != 0)
             {
                 eb0.emplace_back(i1);
@@ -81,6 +83,7 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
         }
     }
     _Attributes->ebo = std::move(eb0);
+    _Attributes->locate_zero();
     _Attributes->calculate_tangents();
     return _Attributes;
 }
@@ -101,6 +104,7 @@ Mesh* generate_quad()
     _Attributes->bind_attribute(NORMAL,3, 3, 8);
     _Attributes->bind_attribute(UV, 2, 6, 8);
     _Attributes->ebo = {0, 1, 2, 1, 3, 2};
+    _Attributes->locate_zero();
     _Attributes->calculate_tangents();
     return _Attributes;
 }
@@ -121,6 +125,7 @@ Mesh* generate_tri()
     _Attributes->bind_attribute(NORMAL,3, 3, 8);
     _Attributes->bind_attribute(UV, 2, 6, 8);
     _Attributes->ebo = {0, 1, 2};
+    _Attributes->locate_zero();
     _Attributes->calculate_tangents();
     return _Attributes;
 }

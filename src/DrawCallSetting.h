@@ -19,6 +19,8 @@ struct DrawCallContextSetting
     Color edge_color = GREEN;
     int background_color = BLACK;
     float shadow_distance = 10;
+    bool enable_shadow = true;
+    bool enable_light_interpolation = true;
 };
 
 #endif //DRAWCALLSETTING_H

@@ -8,9 +8,10 @@
 #include <vector>
 #include "L_math.h"
 #include "Mesh.h"
-#include "Box.h"
+#include "Geometry.h"
 
 #define MAX_CLIP_VERT_COUNT 8
+struct RayCasterResult;
 class DrawCallContext;
 struct  VertexInterpolation;
 //这个类纯数据类，不要继承其他类，不能执行析构函数
@@ -45,7 +46,7 @@ struct TrianglePrimitive
     bool intersect_3D(const L_MATH::Vec<float, 3>& point, const Vec3& dir, RayCasterResult* result);
     bool intersect_2D(const L_MATH::Vec<float, 3>& point, RayCasterResult* result);
     void barycentric(const L_MATH::Vec<float, 3>&, L_MATH::Vec<float, 3>& alpha) const;
-    // void update(const Mat44& mat);
+    void update(const Mat44& mat);
     void update_param();
     void clip();
     void reset();

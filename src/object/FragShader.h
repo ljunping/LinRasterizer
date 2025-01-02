@@ -54,7 +54,13 @@ public:
     template <int N>
     void sample_texture(int frag_index, Texture* texture, L_MATH::Vec<float, N>& result);
 };
+class LightShadowMapFragShader:public FragShader
+{
+    INIT_TYPE(LightShadowMapFragShader, FragShader)
+    public:
+    Vec4 run(int frag_index) override;
 
+};
 class TextureFragShader : public FragShader
 {
     INIT_TYPE(TextureFragShader, FragShader)
@@ -68,7 +74,6 @@ class LightFragShader : public FragShader
     INIT_TYPE(LightFragShader, FragShader)
 public:
     Vec4 run(int frag_index) override;
-    virtual void calculate_normal(int frag_index,Vec3& res);
 };
 
 class NormalTextureLightFragShader : public LightFragShader

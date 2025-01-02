@@ -38,6 +38,9 @@ DEFINE_TYPE(PointLight)
 DEFINE_TYPE(VertShader)
 DEFINE_TYPE(DrawCallNodeComponent)
 DEFINE_TYPE(RenderNodeComponent)
+DEFINE_TYPE(LightShadowMapVertShader)
+DEFINE_TYPE(LightShadowMapFragShader)
+
 
 
 int Object::register_type()
@@ -129,6 +132,8 @@ void TypeFactory::RegisterTypes()
     REGISTER_TYPE(NormalTextureLightFragShader)
     REGISTER_TYPE(VertShader)
     REGISTER_TYPE(DrawCallNodeComponent)
+    REGISTER_TYPE(LightShadowMapFragShader)
+    REGISTER_TYPE(LightShadowMapVertShader)
 }
 
 

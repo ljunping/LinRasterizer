@@ -3,100 +3,16 @@
 //
 
 #include "TrianglePrimitive.h"
+
+#include "BVHTree.h"
 #include "Camera.h"
 #include "debug.h"
 
 
-void Sutherland_Hodgman(std::vector<Vec3>& clip_plane_normal,
-                               std::vector<float>& clip_plane_c,
-                               std::vector<Vec3>& ccw_points, std::vector<std::vector<float>>* result)
-{
-    int clip_size = ccw_points.size();
-    std::vector<std::vector<float>>* ccw_points_temps[2];
-    std::vector<std::vector<float>> ccw_points_temp_3;
-    ccw_points_temps[(clip_plane_normal.size() & 1) ^ 1] = &ccw_points_temp_3;
-    ccw_points_temps[clip_plane_normal.size() & 1] = result;
-    int temp_index = 0;
-    for (int i = 0; i < ccw_points.size(); i++)
-    {
-        std::vector<float> temp_c(ccw_points.size(), 0);
-        temp_c[i] = 1;
-        ccw_points_temps[temp_index]->emplace_back(std::move(temp_c));
-    }
-
-    auto get_pos = [&ccw_points](std::vector<float>& alpha)
-    {
-        Vec3 pos;
-        for (int i = 0; i < ccw_points.size(); i++)
-        {
-            pos += ccw_points[i] * alpha[i];
-        }
-        return pos;
-    };
-
-    auto calculate_alpha = [](std::vector<float>& alpha_l, std::vector<float>& alpha_r, float t,
-                              std::vector<float>& result)
-    {
-        float last = 0;
-        for (int i = 0; i < alpha_l.size() - 1; ++i)
-        {
-            result[i] = alpha_l[i] * (1 - t) + alpha_r[i] * t;
-            last += result[i];
-        }
-        result[alpha_l.size() - 1] = 1 - last;
-    };
-
-    for (int i = 0; i < clip_plane_normal.size(); ++i)
-    {
-        auto& p_normal = clip_plane_normal[i];
-        float c = clip_plane_c[i];
-        auto& ccw_points_temp_1 = *(ccw_points_temps[temp_index]);
-        auto& ccw_points_temp_2 = *(ccw_points_temps[temp_index ^ 1]);
-        ccw_points_temp_2.clear();
-        for (int l = 0; l < ccw_points_temp_1.size(); ++l)
-        {
-            auto& alpha_l = ccw_points_temp_1[l];
-            auto l_p = get_pos(alpha_l);
-            bool l_inside = dot(p_normal, l_p) - c < 0;
-            auto r = (l + 1) % ccw_points_temp_1.size();
-            auto& alpha_r = ccw_points_temp_1[r];
-            auto r_p = get_pos(alpha_r);
-            // 假定平面方程<0是内部
-            bool r_inside = dot(p_normal, r_p) - c < 0;
-            if (!l_inside && !r_inside)
-            {
-                continue;
-            }
-            if (l_inside)
-            {
-                ccw_points_temp_2.emplace_back(alpha_l);
-            }
-            if (!l_inside || !r_inside)
-            {
-                auto dir = r_p - l_p;
-                auto t = intersect_plane(l_p, dir, p_normal, c);
-                if (t > 0 && t < 1)
-                {
-                    std::vector<float> result_l(clip_size, 0);
-                    calculate_alpha(alpha_l, alpha_r, t, result_l);
-                    ccw_points_temp_2.emplace_back(std::move(result_l));
-                }
-            }
-        }
-        temp_index ^= 1;
-    }
-}
 
 
-Vec3 TrianglePrimitive::st_box_plane_normal[6] = {
-    Vec3{0, 0, 1},
-    Vec3{0, 0, -1},
-    Vec3{0, 1, 0},
-    Vec3{0, -1, 0},
-    Vec3{1, 0, 0},
-    Vec3{-1, 0, 0}
-};
-Box<3> TrianglePrimitive::st_box(Vec3{-1, -1, -1},Vec3{1, 1, 1});
+
+
 
 
 
@@ -136,7 +52,7 @@ bool TrianglePrimitive::is_same_sign(const L_MATH::Vec<float, 3>& alpha) const
 
 float TrianglePrimitive::intersect_plane(const L_MATH::Vec<float, 3>& point,const Vec3& dir) const
 {
-    float t =  L_MATH::intersect_plane(point, dir, normal_dir, d);;
+    float t =  ::intersect_plane(point, dir, normal_dir, d);;
     return t;
 }
 //三角形基元已经投影变换
@@ -170,18 +86,18 @@ void TrianglePrimitive::barycentric(const L_MATH::Vec<float, 3>& p,Vec3& alpha) 
     alpha.data[2] = 1 - alpha.data[0] - alpha.data[1];
 }
 
-// void TrianglePrimitive::update(const L_MATH::Mat<float, 4, 4>& mat)
-// {
-//     for (int i = 0; i < 3; ++i)
-//     {
-//         Vec4& _v4 = static_cast<L_MATH::Vec<float, 4>&>(v[i]);
-//         _v4[3] = 1;
-//         _v4 = _v4.mul_transpose(mat);
-//         inv_w[i] = 1 / _v4[3];
-//         _v4 /= _v4[3];
-//     }
-//     update_param();
-// }
+void TrianglePrimitive::update(const L_MATH::Mat<float, 4, 4>& mat)
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        Vec4& _v4 = static_cast<L_MATH::Vec<float, 4>&>(v[i]);
+        _v4[3] = 1;
+        _v4 = _v4.mul_transpose(mat);
+        inv_w[i] = 1 / _v4[3];
+        _v4 /= _v4[3];
+    }
+    update_param();
+}
 
 void TrianglePrimitive::update_param()
 {
@@ -216,12 +132,12 @@ void TrianglePrimitive::clip()
     }
     clipped = true;
     clip_vert_count = 0;
-    Vec3 min = fmin(st_box.min, box.min);
-    Vec3 max = fmax(st_box.max, box.max);
+    Vec3 min = fmin(ST_BOX.min, box.min);
+    Vec3 max = fmax(ST_BOX.max, box.max);
     //两个box完全不相交
-    if (max[0] - min[0] > st_box.max[0] - st_box.min[0] + box.max[0] - box.min[0]
-        && max[1] - min[1] > st_box.max[1] - st_box.min[1] + box.max[1] - box.min[1]
-        && max[2] - min[2] > st_box.max[2] - st_box.min[2] + box.max[2] - box.min[2])
+    if (max[0] - min[0] > ST_BOX.max[0] - ST_BOX.min[0] + box.max[0] - box.min[0]
+        && max[1] - min[1] > ST_BOX.max[1] - ST_BOX.min[1] + box.max[1] - box.min[1]
+        && max[2] - min[2] > ST_BOX.max[2] - ST_BOX.min[2] + box.max[2] - box.min[2])
     {
         return;
     }
@@ -229,7 +145,7 @@ void TrianglePrimitive::clip()
     bool is_inside[3];
     for (int i = 0; i < 3; ++i)
     {
-        is_inside[i]=st_box.inside<3>(v[i]);
+        is_inside[i]=ST_BOX.inside<3>(v[i]);
         if (!is_inside[i])
         {
             need_clip = true;
@@ -252,13 +168,7 @@ void TrianglePrimitive::clip()
         return;
     }
     std::vector<std::vector<float>> clip_alphas;
-    std::vector<Vec3> clip_plane_normal;
-    std::vector<float> clip_plane_c(6, 1);
-    for (int i = 0; i < 6; ++i)
-    {
-        clip_plane_normal.emplace_back( st_box_plane_normal[i]);
-    }
-    Sutherland_Hodgman(clip_plane_normal, clip_plane_c, _clip_vertices, &clip_alphas);
+    Sutherland_Hodgman(ST_BOX_PLANE_NORMAL, ST_BOX_PLANE_C, _clip_vertices, &clip_alphas);
     RUNTIME_ASSERT(clip_alphas.size()<=MAX_CLIP_VERT_COUNT,"clip_alphas.size()<=MAX_CLIP_VERT_COUNT");
     for (int i = 0; i < clip_alphas.size(); ++i)
     {

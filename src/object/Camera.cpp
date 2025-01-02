@@ -16,8 +16,6 @@ static void window_resize(Camera* camera)
     auto current_ctx = get_current_ctx();
     int w, h;
     current_ctx->get_screen_size(w, h);
-    camera->w = w;
-    camera->h = h;
     if (camera->fragment_map!=nullptr)
     {
         free(camera->fragment_map);
@@ -27,7 +25,9 @@ static void window_resize(Camera* camera)
         sizeof(Fragment) * w * h * current_ctx->setting.msaa_factor * current_ctx->setting.msaa_factor));
     camera->depth_buff = static_cast<float*>(malloc(
         sizeof(float) * w * h * current_ctx->setting.msaa_factor * current_ctx->setting.msaa_factor));
-    camera->ratio = w / (float)h;
+    camera->view_frustum.aspect_ratio = w / (float)h;
+    camera->set_dirty();
+
 }
 
 static void window_resize(EventParam& param, void* camera)
@@ -36,12 +36,10 @@ static void window_resize(EventParam& param, void* camera)
 }
 
 
-Camera::Camera(float near, float far, float fov, float ratio, bool isproj):
-    near(near), far(far),
-    fov(fov), ratio(ratio), is_proj(isproj)
+Camera::Camera(float near, float far, float fov, float ratio, bool isproj): is_proj(isproj),
+                                                                            view_frustum(near, far, fov, ratio)
 {
 }
-
 
 
 Camera::~Camera()
@@ -67,32 +65,61 @@ void Camera::on_delete()
     current_ctx->camara_manager->on_delete_obj(this);
     EventSystem::unregister_listener(WindowSizeChange, window_resize, this);
     EventSystem::unregister_listener(MSAAUpdate, window_resize, (void*)this);
+    for (auto object : current_ctx->light_manager->get_objects())
+    {
+        object->on_camera_remove(this);
+    }
     DrawCallNodeComponent::on_delete();
 }
 
 
-const L_MATH::Mat<float, 4, 4>& Camera::get_view_mat() const
+L_MATH::Mat<float, 4, 4>& Camera::get_view_mat()
 {
+    clear_dirty();
     return view_mat;
 }
 
-const L_MATH::Mat<float, 4, 4>& Camera::get_proj_mat() const
+ L_MATH::Mat<float, 4, 4>& Camera::get_proj_mat()
 {
+    clear_dirty();
     return proj_mat;
 }
 
-void Camera::update_view_mat()
+void Camera::set_dirty()
 {
-    auto local_to_global_mat = this->scene_node->get_local_to_global_mat();
-    L_MATH::invert_trs_mat(local_to_global_mat, view_mat);
+    dirty = true;
 }
 
-void Camera::update_proj_mat()
+Frustum Camera::get_shadow_view_frustum(Context* ctx) const
 {
-    proj_mat = (is_proj
-                    ? L_MATH::project(near, far, fov, ratio)
-                    : L_MATH::ortho(near, far, fov, ratio));
+    auto shadow_distance = ctx->setting.shadow_distance;
+    return {view_frustum.near, std::min(shadow_distance, view_frustum.far), view_frustum.fov,
+                   view_frustum.aspect_ratio};
+
 }
+
+L_MATH::Mat<float, 4, 4>& Camera::get_proj_view_mat()
+{
+    clear_dirty();
+    return proj_view;
+}
+
+
+void Camera::clear_dirty()
+{
+    if (dirty)
+    {
+        dirty = false;
+        view_mat = invert_trs_mat(this->scene_node->get_local_to_global_mat());
+        proj_mat = (is_proj
+                        ? view_frustum.get_proj_mat()
+                        : L_MATH::ortho(view_frustum.near, view_frustum.far, view_frustum.fov,
+                                        view_frustum.aspect_ratio));
+        proj_view = proj_mat * view_mat;
+    }
+}
+
+
 
 bool Camera::is_render_layer(int sort_layer) const
 {
@@ -104,10 +131,8 @@ static bool compare_transparent_render_node(const RenderNode& a, const RenderNod
 }
 void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
 {
-    update_proj_mat();
-    update_view_mat();
     auto ctx = get_current_ctx();
-    DrawCallContext draw_call_context{};
+    DrawCallContext draw_call_context;
     draw_call_context.fragment_map = this->fragment_map;
     draw_call_context.depth_buff = this->depth_buff;
     draw_call_context.frame_buff = ctx->get_frame_buffer(0);
@@ -116,6 +141,7 @@ void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
     draw_call_context.setting = ctx->setting;
     draw_call_context.view_world_pos = this->scene_node->get_global_pos();
     draw_call_context.setting.background_color = this->background_color;
+    draw_call_context.camera = this;
     if (this->solid_color)
     {
         d_cmds.emplace_back(draw_call_context, 3, CLEAR_FRAG, CLEAR_DEPTH, CLEAR_FRAME_BUFF);
@@ -127,10 +153,26 @@ void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
     ctx->render_node_manager->collection_render_node(this, render_nodes, false);
     if (!render_nodes.empty())
     {
-        d_cmds.emplace_back(draw_call_context, DRAW);
+        bool first_draw_cmd = true;
         std::ranges::sort(render_nodes, less_compare_render_node);
         for (auto render_node : render_nodes)
         {
+            auto mesh = Resource::get_resource<Mesh>(render_node.mesh);
+
+            if(!mesh)
+            {
+                continue;
+            }
+            Mat44 vm = view_mat * render_node.model_matrix;
+            if (!this->view_frustum.box_in_frustum(mesh->get_box(), vm))
+            {
+                continue;
+            }
+            if (d_cmds.empty() || first_draw_cmd)
+            {
+                first_draw_cmd = false;
+                d_cmds.emplace_back(draw_call_context, DRAW);
+            }
             if (!d_cmds.back().context.try_add_render_node(render_node))
             {
                 d_cmds.emplace_back(draw_call_context, DRAW);
@@ -142,10 +184,21 @@ void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
     ctx->render_node_manager->collection_render_node(this, render_nodes, true);
     if (!render_nodes.empty())
     {
+        bool first_draw_cmd = true;
         std::ranges::sort(render_nodes, compare_transparent_render_node);
         draw_call_context.setting.enable_depth_write = false;
         for (auto render_node : render_nodes)
         {
+            auto mesh = Resource::get_resource<Mesh>(render_node.mesh);
+            if(!mesh)
+            {
+                continue;
+            }
+            Mat44 vm = view_mat * render_node.model_matrix;
+            if (!this->view_frustum.box_in_frustum(mesh->get_box(), vm))
+            {
+                continue;
+            }
             d_cmds.emplace_back(draw_call_context, DRAW);
             d_cmds.back().context.try_add_render_node(render_node);
         }

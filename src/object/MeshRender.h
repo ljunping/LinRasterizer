@@ -5,7 +5,9 @@
 #ifndef MESHRENDER_H
 #define MESHRENDER_H
 #include "Component.h"
-struct GPUCmd;
+class Texture;
+class Material;
+class FragShader;
 class Mesh;
 struct DrawCallContext;
 class Camera;
@@ -58,3 +60,11 @@ public:
     void collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes,bool transparent);
 };
 #endif //MESHRENDER_H
+
+
+MeshRender* add_mesh_render(Transform* node,VertShader* vert_shader, FragShader* frag_shader, Material* material,
+                     Texture* texture,
+                     int render_layer, bool transparent);
+
+
+Transform* create_mesh_provider(Mesh* mesh);

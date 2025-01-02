@@ -317,6 +317,7 @@ namespace L_MATH
     {
         return (Row < Col) ? Row : Col;
     }
+
     template <int Row, int Col>
     constexpr int max()
     {
@@ -339,22 +340,36 @@ namespace L_MATH
         T data[MAX_RC<Col, 4>]{};
         Vec() = default;
 
-        explicit Vec(T flatv)
+        explicit Vec(T v1)
         {
-            if constexpr (Col == 3)
-            {
-                data[0] = flatv;
-                data[1] = flatv;
-                data[2] = flatv;
-                return;
-            }
             for (int i = 0; i < Col; ++i)
             {
-                data[i] = flatv;
+                data[i] = v1;
             }
         }
 
-        template<int COL2>
+        explicit Vec(T v1, T v2)
+        {
+            data[0] = v1;
+            data[1] = v2;
+        }
+
+        explicit Vec(T v1, T v2, T v3)
+        {
+            data[0] = v1;
+            data[1] = v2;
+            data[2] = v3;
+        }
+
+        explicit Vec(T v1, T v2, T v3, T v4)
+        {
+            data[0] = v1;
+            data[1] = v2;
+            data[2] = v3;
+            data[3] = v4;
+        }
+
+        template <int COL2>
         explicit operator L_MATH::Vec<T, COL2>&()
         {
             if constexpr (Col > 4 || COL2 > 4)
@@ -364,7 +379,7 @@ namespace L_MATH
             return reinterpret_cast<L_MATH::Vec<T, COL2>&>(*this);
         }
 
-        template<int COL2>
+        template <int COL2>
         explicit operator const L_MATH::Vec<T, COL2>&()
         {
             if constexpr (Col > 4 || COL2 > 4)
@@ -374,7 +389,7 @@ namespace L_MATH
             return reinterpret_cast<const L_MATH::Vec<T, COL2>&>(*this);
         }
 
-        template<int COL2>
+        template <int COL2>
         explicit operator const L_MATH::Vec<T, COL2>&() const
         {
             if constexpr (Col > 4 || COL2 > 4)
@@ -383,7 +398,6 @@ namespace L_MATH
             }
             return reinterpret_cast<const L_MATH::Vec<T, COL2>&>(*this);
         }
-
 
         Vec(const std::initializer_list<T>& list)
         {
@@ -400,18 +414,27 @@ namespace L_MATH
             }
         }
 
-        template<int Row>
-        Vec<T,Row> operator*(const Mat<T, Col, Row>& mat) const;
+        template <int Row>
+        Vec<T, Row> operator*(const Mat<T, Col, Row>& mat) const;
 
-        template<int Row>
-        Vec<T,Row> mul_transpose(const Mat<T, Row, Col>& mat) const;
+        template <int Row>
+        Vec<T, Row> mul_transpose(const Mat<T, Row, Col>& mat) const;
 
 
-        template<int Row>
+        template <int Row>
         explicit Vec(const Mat<T, Row, 1>& mat);
 
-        template<int Row>
+        template <int Row>
         explicit Vec(const Vec<T, Row>& vec);
+
+        template <int Row>
+        explicit Vec(Vec<T, Row>&& vec);
+
+        template <int Row>
+        Vec<T, Col>& operator=(const Vec<T, Row>& vec);
+
+        template <int Row>
+        Vec<T, Col>& operator=(Vec<T, Row>&& vec);
 
         const static Vec<T, Col> ZERO;
         const static Vec<T, Col> ONE;
@@ -445,6 +468,7 @@ namespace L_MATH
     class Mat
     {
         Vec<T, Row> data[MAX_RC<Col, 4>]{};
+
         void clear(T t)
         {
             for (int i = 0; i < Col; ++i)
@@ -455,6 +479,7 @@ namespace L_MATH
                 }
             }
         }
+
     public:
         Mat() = default;
 
@@ -462,7 +487,8 @@ namespace L_MATH
         {
             clear(t);
         }
-        explicit Mat(const Vec<T,Row>& diagV)
+
+        explicit Mat(const Vec<T, Row>& diagV)
         {
             clear(0);
             for (int i = 0; i < Row; ++i)
@@ -470,9 +496,10 @@ namespace L_MATH
                 data[i][i] = diagV[i];
             }
         }
+
         explicit Mat(const std::initializer_list<Vec<T, Row>>& list)
         {
-            if (list.size() != Row)
+            if (list.size() != Col)
             {
                 return;
             }
@@ -522,7 +549,7 @@ namespace L_MATH
             }
         }
 
-        template<int ROW2,int COL2>
+        template <int ROW2, int COL2>
         explicit operator L_MATH::Mat<T, ROW2, COL2>&()
         {
             if constexpr (ROW2 > 4 || COL2 > 4 || Row > 4 || Col > 4)
@@ -532,7 +559,7 @@ namespace L_MATH
             return reinterpret_cast<L_MATH::Mat<T, ROW2, COL2>&>(*this);
         }
 
-        template<int ROW2,int COL2>
+        template <int ROW2, int COL2>
         explicit operator const L_MATH::Mat<T, ROW2, COL2>&() const
         {
             if constexpr (ROW2 > 4 || COL2 > 4 || Row > 4 || Col > 4)
@@ -618,8 +645,6 @@ namespace L_MATH
         DECLARE_MAT_OPT_SINGLE(*, Row, Col)
         DECLARE_MAT_OPT_SINGLE(/, Row, Col)
     };
-
-
 
 
     inline Vec<float, 3> FORWARD({0, 0, 1});
@@ -708,7 +733,7 @@ namespace L_MATH
         return result;
     }
 
-    template <typename T, int Row,int COL>
+    template <typename T, int Row, int COL>
     T sum(const Mat<T, Row, COL>& a)
     {
         T result = 0;
@@ -770,28 +795,37 @@ namespace L_MATH
     template <int Row>
     Vec<T, Col>::Vec(const Mat<T, Row, 1>& mat)
     {
-        for (int i = 0; i < MIN_RC<Row, Col>; ++i)
-        {
-            data[i] = mat[0][i];
-        }
-        for (int i = MIN_RC<Row, Col>; i < Col; ++i)
-        {
-            data[i] = 0;
-        }
+        std::memcpy(this->data, mat.data[0].data, sizeof(T) * MIN_RC<Row, Col>());
     }
 
     template <typename T, int Col>
     template <int Row>
     Vec<T, Col>::Vec(const Vec<T, Row>& vec)
     {
-        for (int i = 0; i < MIN_RC<Row, Col>; ++i)
-        {
-            data[i] = vec[i];
-        }
-        for (int i = MIN_RC<Row, Col>; i < Col; ++i)
-        {
-            data[i] = 0;
-        }
+        std::memcpy(this->data, vec.data, sizeof(T) * MIN_RC<Row, Col>);
+    }
+
+    template <typename T, int Col>
+    template <int Row>
+    Vec<T, Col>::Vec(Vec<T, Row>&& vec)
+    {
+        std::memcpy(this->data, vec.data, sizeof(T) * MIN_RC<Row, Col>);
+    }
+
+    template <typename T, int Col>
+    template <int Row>
+    Vec<T, Col>& Vec<T, Col>::operator=(const Vec<T, Row>& vec)
+    {
+        std::memcpy(this->data, vec.data, sizeof(T) * MIN_RC<Row, Col>);
+        return *this;
+    }
+
+    template <typename T, int Col>
+    template <int Row>
+    Vec<T, Col>& Vec<T, Col>::operator=(Vec<T, Row>&& vec)
+    {
+        std::memcpy(this->data, vec.data, sizeof(T) * MIN_RC<Row, Col>);
+        return *this;
     }
 
 
@@ -878,10 +912,10 @@ namespace L_MATH
         }
         auto up = up_sn / _up_sn_l;
         auto forward = cross(left, up);
-        float cs = dot(up, _to);
+        float cs = dot(left, _to);
         float sn = dot(forward, _to);
         Mat<float, 3, 3> axis_rot = Mat<float, 3, 3>({left, up, forward});
-        Mat<float, 3, 3> rot_mat_base({1, 0, 0, 0, cs, sn, 0, -sn, cs});
+        Mat<float, 3, 3> rot_mat_base({cs, 0, sn, 0, 1, 0, -sn, 0, cs});
         auto rot_mat_33 = axis_rot * rot_mat_base * axis_rot.transpose();
         rot_mat_33[3][3] = 1;
         return static_cast<L_MATH::Mat<float, 4, 4>&>(rot_mat_33);
@@ -910,12 +944,11 @@ namespace L_MATH
     }
 
 
-    inline Mat<float, 4, 4> ortho(float near, float far, float fov, float ratio)
+    inline Mat<float, 4, 4> ortho(float near, float far, float w, float h)
     {
-        float h = 2 * near * ::tan(fov / 2 / 180 * PI);
         Mat<float, 4, 4> result({
-            2 / (h * ratio), 0, 0, 0,
-            0, 2 / (ratio), 0, 0,
+            2 / w, 0, 0, 0,
+            0, 2 / h, 0, 0,
             0, 0, 2 / (near - far), 0,
             0, 0, (near + far) / (far - near), 1.0f
         });
@@ -941,24 +974,16 @@ namespace L_MATH
     {
         const Vec4& _scale = (const Vec4&)__scale;
         Mat<float, 4, 4> result = Mat<float, 4, 4>::IDENTITY;
-        result[0][0]=_scale[0];
-        result[1][1]=_scale[1];
-        result[2][2]=_scale[2];
+        result[0][0] = _scale[0];
+        result[1][1] = _scale[1];
+        result[2][2] = _scale[2];
         result[3][3] = 1;
         return result;
     }
 
-    
 
-    // 平面方程 plane_normal*x-c=0
-    inline float intersect_plane(const L_MATH::Vec<float, 3>& point, const Vec3& dir, const Vec3& plane_normal, float c)
-    {
-        float t = -(L_MATH::dot(plane_normal, point) - c) / dot(dir, plane_normal);
-        return t;
-    }
-
-    template<typename T,int N>
-    inline void clamp(Vec<T,N>& point, const Vec<T,N>& min, const Vec<T,N>& max)
+    template <typename T, int N>
+    inline void clamp(Vec<T, N>& point, const Vec<T, N>& min, const Vec<T, N>& max)
     {
         point = fmax(min, point);
         point = fmin(max, point);
@@ -996,18 +1021,18 @@ namespace L_MATH
     }
 
     template <class T>
-    inline T linear2(T &a, T &b, float alpha)
+    inline T linear2(T& a, T& b, float alpha)
     {
         return (T)(a * (1 - alpha) + b * alpha);
     }
 
     template <class T>
-    inline T linear3(T &a, T &b, T &c,Vec3 &alpha)
+    inline T linear3(T& a, T& b, T& c,Vec3& alpha)
     {
         return (T)(a * alpha[0] + b * alpha[1] + c * alpha[2]);
     }
 
-    inline  void alpha4(float alpha_x,float alpha_y,Vec4& alpha)
+    inline void alpha4(float alpha_x, float alpha_y,Vec4& alpha)
     {
         alpha[0] = (1 - alpha_x) * (1 - alpha_y);
         alpha[1] = (1 - alpha_y) * alpha_x;
@@ -1016,40 +1041,17 @@ namespace L_MATH
     }
 
     template <class T>
-    inline T linear4(T &a, T &b, T &c, T &d,const Vec4 &alpha)
+    inline T linear4(T& a, T& b, T& c, T& d, const Vec4& alpha)
     {
         return (T)(a * alpha[0] + b * alpha[1] + c * alpha[2] + d * alpha[3]);
     }
 
-    inline float f2_distance(const Mat44& a,const Mat44& b)
+    inline float f2_distance(const Mat44& a, const Mat44& b)
     {
         return sum(pow(a - b, 2));
     }
 
-    inline void decompose_trs(const Mat44& mat,Vec3& t,Vec3& r,Vec3& s)
-    {
-        t[0] = mat[3][0];
-        t[1] = mat[3][1];
-        t[2] = mat[3][2];
 
-        s[0] = sqrt(mat[0][0] * mat[0][0] + mat[0][1] * mat[0][1] + mat[0][2] * mat[0][2]);
-        s[1] = sqrt(mat[1][0] * mat[1][0] + mat[1][1] * mat[1][1] + mat[1][2] * mat[1][2]);
-        s[2] = sqrt(mat[2][0] * mat[2][0] + mat[2][1] * mat[2][1] + mat[2][2] * mat[2][2]);
-
-        r[1] = std::asin(-mat[0][2] / s[0]);
-
-        if (std::cos(r[1]) > 0.0001)
-        {
-            // Check for gimbal lock
-            r[0] = std::atan2(mat[1][2], mat[2][2]);
-            r[2] = std::atan2(mat[0][1], mat[0][0]);
-        }
-        else
-        {
-            r[0] = std::atan2(-mat[2][1], mat[1][1]);
-            r[2] = 0;
-        }
-    }
 
     inline void pos3_l_dot_mat44(Vec3& v, const Mat44& mat)
     {
@@ -1058,65 +1060,36 @@ namespace L_MATH
         v4 = v4.mul_transpose(mat);
         v /= v4[3];
     }
+
+    inline Vec3 pos3_dot_mat44(const Vec3& v, const Mat44& mat)
+    {
+        Vec4 v4 = static_cast<L_MATH::Vec<float, 4>>(v);
+        v4[3] = 1;
+        v4 = v4.mul_transpose(mat);
+        v4 /= v4[3];
+        return static_cast<Vec3&>(v4);
+    }
+
     inline void pos3_l_dot_mat33(Vec3& v, const Mat44& mat)
     {
-        const Mat33& mat33 = static_cast<const Mat33&>(mat);
-        v = v.mul_transpose(mat33);
+        v = v.mul_transpose(static_cast<const Mat33&>(mat));
+    }
+
+    inline Vec3 pos3_dot_mat33(Vec3& v, const Mat44& mat)
+    {
+        Vec3 _v = v;
+        _v = _v.mul_transpose(static_cast<const Mat33&>(mat));
+        return _v;
     }
 
 
-
-    inline Mat44 compose_trs(const Vec3& t,const Vec3& r,const Vec3& s)
+    inline Mat44 compose_trs(const Vec3& t, const Vec3& r, const Vec3& s)
     {
         return L_MATH::translate(t) *
             L_MATH::rotate(L_MATH::FORWARD, r[2]) *
             L_MATH::rotate(L_MATH::UP, r[1]) *
             L_MATH::rotate(L_MATH::LEFT, r[0]) *
             L_MATH::scale(s);
-    }
-
-    inline void invert_trs_mat(const Mat44& trs_mat,Mat44& M_inv)
-    {
-
-        Vec3 t, r, s;
-        decompose_trs(trs_mat, t, r, s);
-        float alpha = r[0];
-        float beta = r[1];
-        float gamma = r[2];
-
-        // Precompute sines and cosines
-        float cos_alpha = std::cos(alpha);
-        float sin_alpha = std::sin(alpha);
-        float cos_beta = std::cos(beta);
-        float sin_beta = std::sin(beta);
-        float cos_gamma = std::cos(gamma);
-        float sin_gamma = std::sin(gamma);
-
-        // Inverse scaling
-        float inv_sx = 1.0f / s[0];
-        float inv_sy = 1.0f / s[1];
-        float inv_sz = 1.0f / s[2];
-
-        Mat44 inv_mat;
-        // Calculate inverse matrix elements (column-major order)
-        M_inv[0][0] = cos_beta * cos_gamma * inv_sx;
-        M_inv[1][0] = cos_beta * sin_gamma * inv_sx;
-        M_inv[2][0] = -sin_beta * inv_sx;
-        M_inv[3][0] = 0.0f;
-
-        M_inv[0][1] = (sin_alpha * sin_beta * cos_gamma - cos_alpha * sin_gamma) * inv_sy;
-        M_inv[1][1] = (sin_alpha * sin_beta * sin_gamma + cos_alpha * cos_gamma) * inv_sy;
-        M_inv[2][1] = sin_alpha * cos_beta * inv_sy;
-        M_inv[3][1] = 0.0f;
-        M_inv[0][2] = (cos_alpha * sin_beta * cos_gamma + sin_alpha * sin_gamma) * inv_sz;
-        M_inv[1][2] = (cos_alpha * sin_beta * sin_gamma - sin_alpha * cos_gamma) * inv_sz;
-        M_inv[2][2] = cos_alpha * cos_beta * inv_sz;
-        M_inv[3][2] = 0.0f;
-
-        M_inv[0][3] = -(M_inv[0][0] * t[0] + M_inv[0][1] * t[1] + M_inv[0][2] * t[2]);
-        M_inv[1][3] = -(M_inv[1][0] * t[0] + M_inv[1][1] * t[1] + M_inv[1][2] * t[2]);
-        M_inv[2][3] = -(M_inv[2][0] * t[0] + M_inv[2][1] * t[1] + M_inv[2][2] * t[2]);
-        M_inv[3][3] = 1.0f;
     }
 
     inline float determinant(const Mat44& m)
@@ -1136,8 +1109,10 @@ namespace L_MATH
             m[1][0] * m[0][1] * m[2][2] * m[3][3] + m[0][0] * m[1][1] * m[2][2] * m[3][3];
     }
 
-    inline void inverse(const Mat44& m,Mat44& inv)
+
+    inline Mat44 inverse(const Mat44& m)
     {
+        Mat44 inv;
         float det = determinant(m);
         if (is_zero(det))
         {
@@ -1174,9 +1149,81 @@ namespace L_MATH
         inv[3][2] = -(m[0][0] * m[1][1] * m[3][2] + m[0][1] * m[1][2] * m[3][0] + m[0][2] * m[1][0] * m[3][1]
             - m[0][0] * m[1][2] * m[3][1] - m[0][1] * m[1][0] * m[3][2] - m[0][2] * m[1][1] * m[3][0]) / det;
         inv[3][3] = (m[0][0] * m[1][1] * m[2][2] + m[0][1] * m[1][2] * m[2][0] + m[0][2] * m[1][0] * m[2][1]
-            - m[0][0] * m[1][2] * m[2][1] - m[0][1] * m[1][0] * m[2][2] - m[0][2] * m[1][1] * m[2][0]) / det;
+            - m[0][0] * m[1][2] * m[2][1] - m[0][1] * m[1][0] * m[2][2] - m[0][2] * m[1][1
+                ] * m[2][0]) / det;
+        return inv;
     }
 
+    inline void decompose_trs(const Mat44& mat,Vec3& t,Vec3& r,Vec3& s)
+    {
+        t[0] = mat[3][0];
+        t[1] = mat[3][1];
+        t[2] = mat[3][2];
+
+        s[0] = sqrt(mat[0][0] * mat[0][0] + mat[0][1] * mat[0][1] + mat[0][2] * mat[0][2]);
+        s[1] = sqrt(mat[1][0] * mat[1][0] + mat[1][1] * mat[1][1] + mat[1][2] * mat[1][2]);
+        s[2] = sqrt(mat[2][0] * mat[2][0] + mat[2][1] * mat[2][1] + mat[2][2] * mat[2][2]);
+
+        r[1] = std::asin(-mat[0][2] / s[0]);
+
+        if (std::cos(r[1]) > 0.0001)
+        {
+            // Check for gimbal lock
+            r[0] = std::atan2(mat[1][2] * s[2], mat[2][2] * s[1]);
+            r[2] = std::atan2(mat[0][1], mat[0][0]);
+        }
+        else
+        {
+            r[0] = std::atan2(-mat[2][1] * s[1], mat[1][1] * s[2]);
+            r[2] = 0;
+        }
+    }
+
+    inline Mat44 invert_trs_mat(const Mat44& trs_mat)
+    {
+        return inverse(trs_mat);
+        // Vec3 t, r, s;
+        // decompose_trs(trs_mat, t, r, s);
+        // float alpha = r[0];
+        // float beta = r[1];
+        // float gamma = r[2];
+        //
+        // // Precompute sines and cosines
+        // float cos_alpha = std::cos(alpha);
+        // float sin_alpha = std::sin(alpha);
+        // float cos_beta = std::cos(beta);
+        // float sin_beta = std::sin(beta);
+        // float cos_gamma = std::cos(gamma);
+        // float sin_gamma = std::sin(gamma);
+        //
+        // // Inverse scaling
+        // float inv_sx = 1.0f / s[0];
+        // float inv_sy = 1.0f / s[1];
+        // float inv_sz = 1.0f / s[2];
+        //
+        // Mat44 M_inv;
+        // // Calculate inverse matrix elements (column-major order)
+        // M_inv[0][0] = cos_beta * cos_gamma * inv_sx;
+        // M_inv[1][0] = cos_beta * sin_gamma * inv_sx;
+        // M_inv[2][0] = -sin_beta * inv_sx;
+        // M_inv[3][0] = 0.0f;
+        //
+        // M_inv[0][1] = (sin_alpha * sin_beta * cos_gamma - cos_alpha * sin_gamma) * inv_sy;
+        // M_inv[1][1] = (sin_alpha * sin_beta * sin_gamma + cos_alpha * cos_gamma) * inv_sy;
+        // M_inv[2][1] = sin_alpha * cos_beta * inv_sy;
+        // M_inv[3][1] = 0.0f;
+        //
+        // M_inv[0][2] = (cos_alpha * sin_beta * cos_gamma + sin_alpha * sin_gamma) * inv_sz;
+        // M_inv[1][2] = (cos_alpha * sin_beta * sin_gamma - sin_alpha * cos_gamma) * inv_sz;
+        // M_inv[2][2] = cos_alpha * cos_beta * inv_sz;
+        // M_inv[3][2] = 0.0f;
+        //
+        // M_inv[0][3] = -(M_inv[0][0] * t[0] + M_inv[0][1] * t[1] + M_inv[0][2] * t[2]);
+        // M_inv[1][3] = -(M_inv[1][0] * t[0] + M_inv[1][1] * t[1] + M_inv[1][2] * t[2]);
+        // M_inv[2][3] = -(M_inv[2][0] * t[0] + M_inv[2][1] * t[1] + M_inv[2][2] * t[2]);
+        // M_inv[3][3] = 1.0f;
+        // return M_inv;
+    }
 
 
 

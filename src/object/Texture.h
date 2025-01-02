@@ -36,10 +36,10 @@ public:
     void texture_mipmap_minify_linear(const L_MATH::Vec<float, 2>& uv, int level, unsigned char*& result);
     void texture_mipmap_magnify(const Vec2& uv, int level, unsigned char*& result);
     void texture_mipmap_magnify_linear(const Vec2& uv, int level, unsigned char*& result);
-
     void generate_mipmaps();
     void sample(const L_MATH::Vec<float, 2>& uv, const Vec2& lod, unsigned char* result);
     Texture(const char* fileName, bool generate_mipmap);
+    Texture(std::shared_ptr<unsigned char[]>& data,int w,int h,int channel, bool generate_mipmap);
     void sample_linear(const L_MATH::Vec<float, 2>& uv, float lod, unsigned char* result);
     void sample(const L_MATH::Vec<float, 2>& uv, float lod, unsigned char* result);
 }
