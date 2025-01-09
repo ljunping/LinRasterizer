@@ -8,6 +8,7 @@
 #include "Camera.h"
 #include "FragShader.h"
 #include "Light.h"
+#include "Mesh.h"
 #include "MeshRender.h"
 #include "VertShader.h"
 
@@ -40,8 +41,10 @@ DEFINE_TYPE(DrawCallNodeComponent)
 DEFINE_TYPE(RenderNodeComponent)
 DEFINE_TYPE(LightShadowMapVertShader)
 DEFINE_TYPE(LightShadowMapFragShader)
-
-
+DEFINE_TYPE(MaterialBRDFFragShader)
+DEFINE_TYPE(BliPhongMaterial)
+DEFINE_TYPE(LambertianMaterial)
+DEFINE_TYPE(GlobalRayTraceVertShader)
 
 int Object::register_type()
 {
@@ -134,6 +137,10 @@ void TypeFactory::RegisterTypes()
     REGISTER_TYPE(DrawCallNodeComponent)
     REGISTER_TYPE(LightShadowMapFragShader)
     REGISTER_TYPE(LightShadowMapVertShader)
+    REGISTER_TYPE(MaterialBRDFFragShader)
+    REGISTER_TYPE(BliPhongMaterial)
+    REGISTER_TYPE(LambertianMaterial)
+    REGISTER_TYPE(GlobalRayTraceVertShader)
 }
 
 

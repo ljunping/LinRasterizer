@@ -76,6 +76,7 @@ void JobSystem::working(int thread_id)
         }
         if (job.group)
         {
+
             job.group->execute(job.data_begin, job.data_end, job.group->global_data);
 
             finish_job(&job);

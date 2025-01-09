@@ -30,7 +30,7 @@ Vec2 msaa_template(int factor,int index);
 void view_transform(DrawCallContext* draw_call_context, int msaa_index, int w, int h, float st_x, float st_y, int& i,
                     int& j);
 
-void invert_view_transform(DrawCallContext* draw_call_context, int msaa_index, int w, int h, int i, int j, float& st_x, float& st_y);
+void invert_view_transform(DrawCallContext* draw_call_context, int msaa_index, int w, int h, float i, float j, float& st_x, float& st_y);
 
 
 
@@ -51,6 +51,12 @@ void rast_huge_tri(TrianglePrimitive& tri, DrawCallContext* ctx);
 
 void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
 void ray_cast_frag_complete(std::size_t data_begin,std::size_t data_end, void* global_data);
+
+inline std::atomic<int> global_count(0);
+
+void global_path_ray_cast_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
+Vec3 calculate_ray_shader(DrawCallContext* call, const Vec3& pos, const Vec3& dir);
+
 
 void clear_depth_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
 

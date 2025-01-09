@@ -43,8 +43,54 @@ void Context::on_key_event(XEvent& event)
     {
     case XK_1:
         {
+            for (auto object : light_manager->get_objects())
+            {
+                SpotLight* spot_light = static_cast<SpotLight*>(object);
+                spot_light->pause_update = !spot_light->pause_update;
+            }
+        }
+    case XK_2:
+        {
+            auto camera = this->camara_manager->get_objects()[0].data;
+            camera->scene_node->local_pos[0] += 0.01f;
+            camera->set_dirty();
+        }
+    case XK_3:
+        {
+            auto camera = this->camara_manager->get_objects()[0].data;
+            camera->scene_node->local_pos[1] += 0.01f;
+            camera->set_dirty();
 
         }
+    case XK_4:
+        {
+            auto camera = this->camara_manager->get_objects()[0].data;
+            camera->scene_node->local_pos[2] += 0.01f;
+            camera->set_dirty();
+
+        }
+    case XK_5:
+        {
+            auto camera = this->camara_manager->get_objects()[0].data;
+            camera->scene_node->local_euler_angles[0] += 5;
+            camera->set_dirty();
+
+        }
+    case XK_6:
+        {
+            auto camera = this->camara_manager->get_objects()[0].data;
+            camera->scene_node->local_euler_angles[1] += 5;
+            camera->set_dirty();
+
+        }
+    case XK_7:
+        {
+            auto camera = this->camara_manager->get_objects()[0].data;
+            camera->scene_node->local_euler_angles[2] += 5;
+            camera->set_dirty();
+
+        }
+
     }
 }
 

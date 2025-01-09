@@ -9,6 +9,7 @@
 #include "DrawCallContext.h"
 #include "FragShader.h"
 #include "JobSystem.h"
+#include "Mesh.h"
 #include "RasterizerJob.h"
 
 
@@ -19,6 +20,11 @@ void GPU::draw(DrawCallContext* dc)
 {
     run_vert_shader(dc);
     process_primitives(dc);
+    if (dc->setting.enable_global_path_trace)
+    {
+        global_ray_trace(dc);
+        return;
+    }
     for (int j = 0; j < dc->setting.msaa_factor; ++j)
     {
         if (!dc->setting.enable_ray_cast)
@@ -30,7 +36,10 @@ void GPU::draw(DrawCallContext* dc)
             ray_cast_scene(dc, j);
         }
     }
-    run_frag_shader(dc);
+    if (dc->setting.run_fragment)
+    {
+        run_frag_shader(dc);
+    }
 }
 
 
@@ -233,6 +242,23 @@ int GPU::raster_scene(DrawCallContext* dc,int msaa_index)
     return job_group;
 }
 
+void GPU::global_ray_trace(DrawCallContext* dc)
+{
+    global_count = 0;
+    auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
+
+    JOB_SYSTEM.alloc_jobs(job_group, 0,
+                          0, dc->w * dc->h, dc
+                          , global_path_ray_cast_execute, default_complete);
+    JOB_SYSTEM.submit_job_group(job_group);
+    auto mid_filter_job = JOB_SYSTEM.create_job_group(job_group);
+    JOB_SYSTEM.alloc_jobs(mid_filter_job, 0,
+                          0, dc->w * dc->h, dc
+                          , mid_filter_execute, default_complete);
+    JOB_SYSTEM.submit_job_group(mid_filter_job);
+    update_frame_job_id(mid_filter_job);
+}
+
 int GPU::clear_fragment(DrawCallContext* dc)
 {
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
@@ -266,6 +292,8 @@ void GPU::clear_depth(DrawCallContext* draw_call_context)
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);
 }
+
+
 
 void GPU::run(GPUCmds& cmd)
 {

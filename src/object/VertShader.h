@@ -26,5 +26,12 @@ class LightShadowMapVertShader : public VertShader
 ;
 
 
+class GlobalRayTraceVertShader : public VertShader
+{
+    INIT_TYPE(GlobalRayTraceVertShader, VertShader)
+    void run(DrawCallContext* context, int vert_index) override;
+}
+;
+
 
 #endif //VERTSHADER_H

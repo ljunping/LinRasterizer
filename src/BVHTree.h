@@ -40,8 +40,8 @@ class BVHTree
     BVHNode* build_BVH(typename std::vector<TrianglePrimitive*>::iterator begin, typename std::vector<TrianglePrimitive*>::iterator end, int depth = 0);
 
 
-    bool traverse_BVH(const BVHNode* node, const Vec3& origin, const Vec3& dir, float tMin, float tMax,
-                      std::vector<RayCasterResult>& result);
+    bool traverse_BVH(const BVHNode* node, const L_MATH::Vec<float, 3>& origin, const L_MATH::Vec<float, 3>& dir, float tMin, float tMax,
+                      std::vector<RayCasterResult>& result, bool (*condition)(TrianglePrimitive*, void*), void* data);
 
     static bool intersect_box(const Box<3>& box, const Vec3& origin, const Vec3& dir, float& tMin, float& tMax);
 
@@ -57,7 +57,8 @@ public:
 
     void clear();
 
-    bool intersect_traverse(const Vec3& origin, const Vec3& dir, std::vector<RayCasterResult>& result);
+    bool intersect_traverse(const L_MATH::Vec<float, 3>& origin, const L_MATH::Vec<float, 3>& dir, std::vector<RayCasterResult>& result, bool (*
+                                condition)(TrianglePrimitive*, void*), void* data);
 
     bool intersect_compare_distance(const Vec3& origin, const Vec3& dir, RayCasterResult* result,
                                     float (*box_distance)(Box<3>& box),

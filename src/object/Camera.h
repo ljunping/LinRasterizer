@@ -10,7 +10,7 @@
 #include "L_math.h"
 struct GPUCmds;
 class Context;
-class TrianglePrimitive;
+struct TrianglePrimitive;
 
 #define GET_CAMERA(id) (Camera*)TypeFactory::get_type_inst_by_inst_id(id)
 

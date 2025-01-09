@@ -63,7 +63,10 @@ BVHNode* BVHTree::build_BVH(std::vector<TrianglePrimitive*>::iterator begin,
 
 
 bool BVHTree::traverse_BVH(const BVHNode* node, const L_MATH::Vec<float, 3>& origin,
-                                  const L_MATH::Vec<float, 3>& dir, float tMin, float tMax, std::vector<RayCasterResult>& result)
+                                  const L_MATH::Vec<float, 3>& dir, float tMin, float tMax,
+                                  std::vector<RayCasterResult>& result,
+                                  bool(* condition)(TrianglePrimitive*,void *),void *data
+                                  )
 {
     // intersect_traverse_count++;
     if (!node || !intersect_box(node->aabb, origin, dir, tMin, tMax))
@@ -72,6 +75,10 @@ bool BVHTree::traverse_BVH(const BVHNode* node, const L_MATH::Vec<float, 3>& ori
     }
     if (node->geometry)
     {
+        if (condition && !condition(node->geometry, data))
+        {
+            return false;
+        }
         result.emplace_back();
         if (!node->geometry->intersect_3D(origin, dir, &result.back()))
         {
@@ -80,8 +87,8 @@ bool BVHTree::traverse_BVH(const BVHNode* node, const L_MATH::Vec<float, 3>& ori
         }
         return true;
     }
-    bool a = traverse_BVH(node->left, origin, dir, tMin, tMax, result);
-    bool b = traverse_BVH(node->right, origin, dir, tMin, tMax, result);
+    bool a = traverse_BVH(node->left, origin, dir, tMin, tMax, result, condition, data);
+    bool b = traverse_BVH(node->right, origin, dir, tMin, tMax, result, condition, data);
 
     return a || b;
 }
@@ -132,12 +139,13 @@ inline void BVHTree::clear()
 }
 
 bool BVHTree::intersect_traverse(const L_MATH::Vec<float, 3>& origin, const L_MATH::Vec<float, 3>& dir,
-                                        std::vector<RayCasterResult>& result)
+                                        std::vector<RayCasterResult>& result,
+                                        bool(* condition)(TrianglePrimitive*,void *),void *data)
 {
     float minT = -INFINITY;
     float maxT = INFINITY;
     // intersect_traverse_count = 0;
-    bool res = traverse_BVH(root, origin, dir, minT, maxT, result);
+    bool res = traverse_BVH(root, origin, dir, minT, maxT, result,condition,data);
     // printf("intersect_traverse %d\n", intersect_traverse_count);
     return res;
 }

@@ -452,6 +452,7 @@ namespace L_MATH
         T dot(const Vec<T, Col>& other) const;
         T magnitude() const;
         T sqrt_magnitude() const;
+        T invert_sqrt_magnitude() const;
         Vec<T, Col> normalize() const;
         void normalized();
 
@@ -845,6 +846,12 @@ namespace L_MATH
     T Vec<T, Col>::sqrt_magnitude() const
     {
         return sqrt(dot(*this));
+    }
+
+    template <typename T, int Col>
+    T Vec<T, Col>::invert_sqrt_magnitude() const
+    {
+        return 1 / ::sqrt(dot(*this));
     }
 
     template <typename T, int Col>

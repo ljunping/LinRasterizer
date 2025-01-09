@@ -10,6 +10,7 @@
 #include "Context.h"
 #include "Transform.h"
 #include "DrawCallContext.h"
+#include "Mesh.h"
 #include "VertShader.h"
 
 

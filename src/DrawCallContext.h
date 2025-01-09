@@ -27,6 +27,7 @@ class Camera;
 enum VertOutPutType
 {
     WORLD_POS,
+    WORLD_NORMAL,
     VIEW_POS,
     VIEW_NORMAL,
     VIEW_VIEW_DIR,
@@ -64,7 +65,11 @@ class DrawCallContext
 {
 private:
     friend class GPU;
+
 public:
+    //global_ray_path_trace
+    std::vector<RenderNode> global_ray_trace_render_nodes;
+    //
     int w{}, h{};
     Fragment* fragment_map{};
     Camera* camera{};
@@ -93,15 +98,16 @@ public:
     ~DrawCallContext();
     void assign_triangle_primitives(int size);
     L_MATH::Mat<float, 4, 4> get_model_matrix(Mesh* mesh) const;
+    RenderNode& get_render_node(Mesh* mesh);
     Mesh* get_mesh(int vert_index, int& mesh_index) const;
     int get_muti_mesh_vert_index(const Mesh* mesh, int mesh_index) const;
     void generate_triangle_primitive(TrianglePrimitive& tri);
-    template<int N>
+    template <int N>
     void get_vert_attribute_value(Mesh*, int vert_index, int attribute_index, L_MATH::Vec<float, N>& result);
     void create_vert_attribute(Mesh* mesh, int v0, int v1, int v2,
                                const L_MATH::Vec<float, 3>& alpha, VertexInterpolation& result);
-
-};
+}
+;
 
 
 
@@ -128,6 +134,7 @@ struct Fragment
     Vec2 resolution;
     DrawCallContext* draw_call{};
     VertexInterpolation interpolation_data;
+    Material* material{};
     bool build_interpolation_data = false;
 };
 

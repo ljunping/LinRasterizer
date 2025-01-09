@@ -9,6 +9,7 @@
 #include "DrawCallContext.h"
 #include "Light.h"
 #include "Material.h"
+#include "Mesh.h"
 #include "MeshRender.h"
 #include "Transform.h"
 #include "WindowHandle.h"
@@ -99,7 +100,7 @@ L_MATH::Vec<float, 4> LightFragShader::run(int frag_index)
     frag_color[3] = 1;
     Vec3& frag_color_v3 = static_cast<L_MATH::Vec<float, 3>&>(frag_color);
     int light_index = 0;
-    frag_color_v3 += texture_color * ke;
+    frag_color_v3 += texture_color * ke * std::max(L_MATH::dot(view_dir, view_normal), 0.0f);
     for (auto light : draw_call->ctx->light_manager->get_objects())
     {
         auto calculate_shadow = light->calculate_shadow(draw_call->camera, world_pos);
@@ -110,7 +111,7 @@ L_MATH::Vec<float, 4> LightFragShader::run(int frag_index)
         Vec3 light_dir = static_cast<L_MATH::Vec<float, 3>&>(view_light_dirs[light_index]);
         auto light_dis = light_dir.sqrt_magnitude();
         light_dir /= light_dis;
-        auto light_color = texture_color * light->color * light->calculate_intensity(world_pos);
+        auto light_color = texture_color * light->calculate_radiance(world_pos);
         auto h = ((light_dir + view_dir) / 2).normalize();
         frag_color_v3 += kd * std::max(0.f, light_dir.dot(view_normal)) * light_color;
         frag_color_v3 += ks * std::pow(std::max(0.f, h.dot(view_normal)), 200) * light_color;
@@ -147,7 +148,47 @@ L_MATH::Vec<float, 4> NormalTextureLightFragShader::run(int frag_index)
     Vec3& frag_color_v3 = static_cast<L_MATH::Vec<float, 3>&>(frag_color);
     int light_index = 0;
     frag_color_v3[3] = 1;
-    frag_color_v3 += texture_color * ke;
+    frag_color_v3 += texture_color * ke * std::max(L_MATH::dot(tbn_view_dir, tbn_view_normal), 0.f);
+    for (auto light : draw_call->ctx->light_manager->get_objects())
+    {
+        auto calculate_shadow = 1 - light->calculate_shadow(draw_call->camera, world_pos);
+        Vec3 light_dir = static_cast<L_MATH::Vec<float, 3>&>(tbn_light_dirs[light_index]);
+        auto light_dis = light_dir.sqrt_magnitude();
+        light_dir /= light_dis;
+        auto light_color = texture_color * light->calculate_radiance(world_pos) * calculate_shadow;
+        auto h = ((light_dir + tbn_view_dir) / 2).normalize();
+        frag_color_v3 += kd * std::max(0.f, light_dir.dot(tbn_view_normal)) * light_color;
+        frag_color_v3 += ks * std::pow(std::max(0.f, h.dot(tbn_view_normal)), 200) * light_color;
+        light_index++;
+    }
+    L_MATH::clamp(frag_color,Vec4::ZERO,Vec4::ONE);
+    return frag_color;
+}
+
+L_MATH::Vec<float, 4> MaterialBRDFFragShader::run(int frag_index)
+{
+    auto& fragment = fragment_map[frag_index];
+    auto material = this->draw_call->materials[0];
+    auto fix_outputs = fragment.interpolation_data.output.fix_outputs;
+    auto& tbn_light_dirs = fragment.interpolation_data.output.tbn_light_dirs;
+    Vec3 tbn_view_dir, tbn_view_normal;
+    tbn_view_dir = static_cast<L_MATH::Vec<float, 3>&>(fix_outputs[TBN_VIEW_DIR]);
+    Vec3 world_pos = static_cast<L_MATH::Vec<float, 3>&>(fix_outputs[WORLD_POS]);
+    tbn_view_dir.normalized();
+    sample_texture(1, frag_index, static_cast<L_MATH::Vec<float, 4>&>(tbn_view_normal));
+    tbn_view_normal = (tbn_view_normal * 2 - 1);
+    auto bump_factor = material->get_float_uniform(MATERIAL_NORMAL_BUMP_FACTOR);
+    tbn_view_normal[0] *= bump_factor;
+    tbn_view_normal[1] *= bump_factor;
+    tbn_view_normal.normalized();
+    Vec4 texture_color;
+    sample_texture(0, frag_index, texture_color);
+    Vec4 frag_color;
+    Vec3& frag_color_v3 = static_cast<L_MATH::Vec<float, 3>&>(frag_color);
+    int light_index = 0;
+    frag_color_v3[3] = 1;
+    frag_color_v3 += texture_color * material->get_Vec4_uniform(MATERIAL_ENV_LIGHT) * std::max(
+        L_MATH::dot(tbn_view_dir, tbn_view_normal), 0.3f);
     for (auto light : draw_call->ctx->light_manager->get_objects())
     {
         auto calculate_shadow = light->calculate_shadow(draw_call->camera, world_pos);
@@ -158,14 +199,12 @@ L_MATH::Vec<float, 4> NormalTextureLightFragShader::run(int frag_index)
         Vec3 light_dir = static_cast<L_MATH::Vec<float, 3>&>(tbn_light_dirs[light_index]);
         auto light_dis = light_dir.sqrt_magnitude();
         light_dir /= light_dis;
-        auto light_color = texture_color * light->color * light->calculate_intensity(world_pos);
-        auto h = ((light_dir + tbn_view_dir) / 2).normalize();
-        frag_color_v3 += kd * std::max(0.f, light_dir.dot(tbn_view_normal)) * light_color;
-        frag_color_v3 += ks * std::pow(std::max(0.f, h.dot(tbn_view_normal)), 200) * light_color;
+        auto light_color = texture_color * light->calculate_radiance(world_pos) * std::max(
+            dot(light_dir, tbn_view_normal), 0.f);
+
+        frag_color_v3 += light_color * material->f(tbn_view_normal, light_dir, tbn_view_dir) * PI;
         light_index++;
     }
-    // frag_color_v3
-    // color /= 6;
     L_MATH::clamp(frag_color,Vec4::ZERO,Vec4::ONE);
     return frag_color;
 }

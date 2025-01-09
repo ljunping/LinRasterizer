@@ -10,6 +10,8 @@
 #include "DrawCallContext.h"
 #include "DrawCallSetting.h"
 #include "GPU.h"
+#include "Mesh.h"
+#include "VertShader.h"
 
 static void window_resize(Camera* camera)
 {
@@ -131,6 +133,7 @@ static bool compare_transparent_render_node(const RenderNode& a, const RenderNod
 }
 void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
 {
+    clear_dirty();
     auto ctx = get_current_ctx();
     DrawCallContext draw_call_context;
     draw_call_context.fragment_map = this->fragment_map;
@@ -142,6 +145,7 @@ void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
     draw_call_context.view_world_pos = this->scene_node->get_global_pos();
     draw_call_context.setting.background_color = this->background_color;
     draw_call_context.camera = this;
+    draw_call_context.setting.enable_global_path_trace = ctx->setting.camera_global_path_trace;
     if (this->solid_color)
     {
         d_cmds.emplace_back(draw_call_context, 3, CLEAR_FRAG, CLEAR_DEPTH, CLEAR_FRAME_BUFF);
@@ -151,6 +155,21 @@ void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
     }
     std::vector<RenderNode> render_nodes;
     ctx->render_node_manager->collection_render_node(this, render_nodes, false);
+    if (ctx->setting.camera_global_path_trace)
+    {
+        d_cmds.emplace_back(draw_call_context, DRAW);
+        auto& d_cmd = d_cmds.back();
+        d_cmd.context.global_ray_trace_render_nodes.assign(render_nodes.begin(), render_nodes.end());
+        d_cmd.context.vert_shader = COPY_OBJECT(Resource::get_or_create_resource<GlobalRayTraceVertShader>(
+            "GlobalRayTraceVertShader.frag"));
+        d_cmd.context.setting.enable_light_interpolation = false;
+        for (auto render_node : render_nodes)
+        {
+            auto mesh = Resource::get_resource<Mesh>(render_node.mesh);
+            d_cmd.context.meshes.emplace_back(mesh, render_node.model_matrix);
+        }
+        return;
+    }
     if (!render_nodes.empty())
     {
         bool first_draw_cmd = true;

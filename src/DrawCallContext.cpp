@@ -15,6 +15,7 @@
 #include "VertShader.h"
 #include "CommonMacro.h"
 #include "Light.h"
+#include "Mesh.h"
 #include "Transform.h"
 
 
@@ -25,6 +26,7 @@ void DrawCallContext::generate_triangle_primitive(TrianglePrimitive& tri)
         auto vert_index = this->get_muti_mesh_vert_index(tri.mesh, tri.vert_index[i]);
         Vec4& v = static_cast<L_MATH::Vec<float, 4>&>(tri.v[i]);
         v = this->gl_positions[vert_index];
+        tri.render_node = &this->get_render_node(tri.mesh);
     }
     tri.update_param();
 }
@@ -94,6 +96,21 @@ Mat44 DrawCallContext::get_model_matrix(Mesh* mesh) const
         }
     }
     return L_MATH::Mat<float, 4, 4>::IDENTITY;
+}
+
+RenderNode& DrawCallContext::get_render_node(Mesh* mesh)
+{
+    if (this->setting.enable_global_path_trace)
+    {
+        for (auto& render_node : global_ray_trace_render_nodes)
+        {
+            if (render_node.mesh == mesh->get_instance_id())
+            {
+                return render_node;
+            }
+        }
+    }
+    return render_node;
 }
 
 

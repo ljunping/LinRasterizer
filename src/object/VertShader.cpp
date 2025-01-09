@@ -81,4 +81,24 @@ void LightShadowMapVertShader::run(DrawCallContext* context, int vert_index)
     gl_pos = pos;
     gl_pos[3] = 1.0f;
     L_MATH::pos3_l_dot_mat44(gl_pos, projection_mat);
+    auto fix_outputs = context->outputs[vert_index].fix_outputs;
+    fix_outputs[WORLD_POS] = (static_cast<L_MATH::Vec<float, 4>&>(pos));
+}
+
+void GlobalRayTraceVertShader::run(DrawCallContext* context, int vert_index)
+{
+    int mesh_index = 0;
+    auto mesh = context->get_mesh(vert_index, mesh_index);
+    Mat44 model_mat = context->get_model_matrix(mesh);
+    Vec3 pos, normal;
+    mesh->get_attribute_value(mesh_index, POS, pos);
+    mesh->get_attribute_value(mesh_index, NORMAL, normal);
+    L_MATH::pos3_l_dot_mat44(pos, model_mat);
+    L_MATH::pos3_l_dot_mat33(normal, model_mat);
+    Vec3& gl_pos = static_cast<L_MATH::Vec<float, 3>&>(context->gl_positions[vert_index]);
+    gl_pos = pos;
+    gl_pos[3] = 1.0f;
+    auto fix_outputs = context->outputs[vert_index].fix_outputs;
+    fix_outputs[WORLD_NORMAL] = (static_cast<L_MATH::Vec<float, 4>&>(normal));
+    fix_outputs[WORLD_POS] = (static_cast<L_MATH::Vec<float, 4>&>(pos));
 }

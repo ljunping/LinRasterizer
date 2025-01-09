@@ -36,6 +36,7 @@ enum AttributeType
 
 enum FormValueType
 {
+    MATERIAL_ENV_LIGHT,
     MATERIAL_LIGHT_KD,
     MATERIAL_LIGHT_KS,
     MATERIAL_LIGHT_KA,

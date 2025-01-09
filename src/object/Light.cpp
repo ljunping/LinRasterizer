@@ -8,6 +8,7 @@
 #include "Context.h"
 #include "GPU.h"
 #include "ImageUtil.h"
+#include "Mesh.h"
 #include "MeshGenerator.h"
 #include "MeshRender.h"
 #include "Transform.h"
@@ -35,9 +36,14 @@ void Light::on_delete()
     Component::on_delete();
 }
 
-float Light::calculate_intensity(L_MATH::Vec<float, 3> pos)
+bool Light::intersect(const L_MATH::Vec<float, 3>& pos, const L_MATH::Vec<float, 3>& dir)
 {
-    return intensity;
+    return false;
+}
+
+Vec3 Light::calculate_radiance(L_MATH::Vec<float, 3> pos)
+{
+    return c_light;
 }
 
 
@@ -50,6 +56,12 @@ bool SpotLight::need_update() const
 static float _time = 0;
 void SpotLight::update(float delta_time)
 {
+    // this->scene_node->local_euler_angles={-139.946701, 45.9751091, -98.6603469, 0};
+    // this->scene_node->local_pos = {1.60781765, 1, -3.1895051, 0};
+    if (pause_update)
+    {
+        return;
+    }
     static int id = 0;
     _time += delta_time;
     if (!save_images)
@@ -64,9 +76,9 @@ void SpotLight::update(float delta_time)
                 4
             };
             ImageUtil::save_image(("shadow_map" + std::to_string(this->get_instance_id()) + ".jpg").c_str(), image);
-            id++;
         }
     }
+    return;
     if (!this->sun_node)
     {
         sun_node = create_mesh_provider(generate_sphere(0.1, 10, 10));
@@ -79,11 +91,8 @@ void SpotLight::update(float delta_time)
     }
 
     Vec3 look_at = {0, 0, -2};
-    this->scene_node->local_pos[0] = cos(_time * PI / 4) * 1;
-    this->scene_node->local_pos[2] = -(sin(_time * PI / 4) * 1) - 2;
-    // this->scene_node->local_pos[0] = 0;
-    // this->scene_node->local_pos[2] = -3;
-
+    this->scene_node->local_pos[0] = 2*cos(_time * PI / 4) * 1;
+    this->scene_node->local_pos[2] = -2*(sin(_time * PI / 4) * 1) - 2;
     auto look_dir = (look_at - this->scene_node->local_pos).normalize();
     auto rotate = L_MATH::rotate(L_MATH::FORWARD * -1, look_dir);
     Vec3 r, t, s;
@@ -93,7 +102,7 @@ void SpotLight::update(float delta_time)
     global_mat = this->scene_node->get_local_to_global_mat();
 }
 
-float SpotLight::calculate_intensity(L_MATH::Vec<float, 3> pos)
+Vec3 SpotLight::calculate_radiance(L_MATH::Vec<float, 3> pos)
 {
     Vec3& light_pos = static_cast<L_MATH::Vec<float, 3>&>(global_mat[3]);
     Vec3& light_dir = static_cast<L_MATH::Vec<float, 3>&>(global_mat[2]);
@@ -102,13 +111,23 @@ float SpotLight::calculate_intensity(L_MATH::Vec<float, 3> pos)
     dir /= sqrt_magnitude;
     if (sqrt_magnitude > max_distance)
     {
-        return 0.0f;
+        return Vec3::ZERO;
     }
     if (-L_MATH::dot(light_dir, dir) < cos_angle)
     {
-        return 0;
+        return Vec3::ZERO;
     }
-    return intensity / (sqrt_magnitude * sqrt_magnitude);
+    return c_light / (sqrt_magnitude * sqrt_magnitude);
+}
+
+bool SpotLight::intersect(const L_MATH::Vec<float, 3>& pos, const L_MATH::Vec<float, 3>& dir)
+{
+    Vec3& light_pos = static_cast<L_MATH::Vec<float, 3>&>(global_mat[3]);
+    auto len = (pos - light_pos).sqrt_magnitude();
+    auto light_dir = (light_pos - pos) / len;
+    auto cos_v = dot(light_dir, dir);
+    auto sin_v = radius / len;
+    return cos_v * cos_v > (1 - sin_v * sin_v);
 }
 
 SpotLight::~SpotLight()
@@ -148,7 +167,7 @@ float SpotLight::calculate_shadow(Camera* camera, const L_MATH::Vec<float, 3>& w
         {
             return 0.0f;
         }
-        auto bias =  this->bias + this->const_bias;
+        auto bias =  this->const_bias;
         if (depth < proj_pos[2] - bias)
         {
             return 1.0f;
@@ -320,6 +339,7 @@ void SpotLight::collect_draw_call_cmds(Camera* camera,std::vector<GPUCmds>& d_cm
     auto& light_draw_info = light_draw_infos[camera];
     draw_call_context.setting = ctx->setting;
     draw_call_context.setting.msaa_factor = 1;
+    draw_call_context.setting.run_fragment=true;
     draw_call_context.frame_buff = light_draw_info.shadow_map;
     draw_call_context.fragment_map = light_draw_info.fragment_map;
     draw_call_context.depth_buff = light_draw_info.depth_buff;

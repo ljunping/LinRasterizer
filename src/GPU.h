@@ -35,6 +35,7 @@ class GPU
     static int raster_scene(DrawCallContext* context, int msaa_index);
     static void clear_frame_buff(DrawCallContext* draw_call_context);
     static void clear_depth(DrawCallContext* draw_call_context);
+    static void global_ray_trace(DrawCallContext* dc);
     static void draw(DrawCallContext* dc);
     static int clear_fragment(DrawCallContext* dc);
     static bool is_render_job_finish(int job_group_id);

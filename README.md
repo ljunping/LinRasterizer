@@ -66,25 +66,58 @@ make
 类似UNITY引擎，具备GetComponent<T>()、RemoveComponent<T>等基本方法。实现了Transform、Camera、MeshRender等核心组件。
 下面多meshRender的效果
 
-![muti_obj.png](render_img/muti_obj.png)
-###### 10、性能测试
-设备Macbook Pro2023 14寸笔记本电脑。渲染"resources/pig/16433_Pig.obj"文件，包含了120576个三角形。分辨率640*480.默认 release build
-在不同的MSAA倍率下，光线投射和光栅化两种渲染模式的平均帧率如下
+###### 10、phong光照模型、凹凸贴图支持
 
-1、JobSystem开启8线程
+![phong_light.png](render_img/phong_light.png)
 
-| MSAA | 光线投射    | 光线投射（bvh加速） | 光栅化    |           
-|------|---------|-------------|--------|
-| 1    | 0.20fps | 27fps       | 120fps |
-| 2    | 0.09fps | 18fps       | 70fps  |
-| 4    | 0.05fps | 11fps       | 35fps  |
+![normal_texture.png](render_img/normal_texture.png)
 
-2、JobSystem单线程
+###### 11、阴影shadow_map支持
 
-| MSAA   | 光线投射（bvh加速） | 光栅化    |
-|--------|-------------|--------|
-| 1     | 10.3fps       | 40fps |
-| 2     | 6.5fps       | 25fps  |
-| 4     |3.5fps       | 10fps  |
+<img alt="shadow_map4.jpg" height="200" src="render_img/shadow_map4.jpg" width="200"/>
+
+![shadow_map.png](render_img/shadow_map.png)
+
+
+###### 12、全局光照路径追踪简单实现
+
+![global_path_ray_trace.png](render_img/global_path_ray_trace.png)
+
+
+[//]: # (![muti_obj.png]&#40;render_img/muti_obj.png&#41;)
+
+[//]: # (###### 10、性能测试)
+
+[//]: # (设备Macbook Pro2023 14寸笔记本电脑。渲染"resources/pig/16433_Pig.obj"文件，包含了120576个三角形。分辨率640*480.默认 release build)
+
+[//]: # (在不同的MSAA倍率下，光线投射和光栅化两种渲染模式的平均帧率如下)
+
+[//]: # ()
+[//]: # (1、JobSystem开启8线程)
+
+[//]: # ()
+[//]: # (| MSAA | 光线投射    | 光线投射（bvh加速） | 光栅化    |           )
+
+[//]: # (|------|---------|-------------|--------|)
+
+[//]: # (| 1    | 0.20fps | 27fps       | 120fps |)
+
+[//]: # (| 2    | 0.09fps | 18fps       | 70fps  |)
+
+[//]: # (| 4    | 0.05fps | 11fps       | 35fps  |)
+
+[//]: # ()
+[//]: # (2、JobSystem单线程)
+
+[//]: # ()
+[//]: # (| MSAA   | 光线投射（bvh加速） | 光栅化    |)
+
+[//]: # (|--------|-------------|--------|)
+
+[//]: # (| 1     | 10.3fps       | 40fps |)
+
+[//]: # (| 2     | 6.5fps       | 25fps  |)
+
+[//]: # (| 4     |3.5fps       | 10fps  |)
 
 

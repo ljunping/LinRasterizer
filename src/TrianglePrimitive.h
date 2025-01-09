@@ -7,10 +7,11 @@
 #pragma once
 #include <vector>
 #include "L_math.h"
-#include "Mesh.h"
 #include "Geometry.h"
 
 #define MAX_CLIP_VERT_COUNT 8
+struct RenderNode;
+class Mesh;
 struct RayCasterResult;
 class DrawCallContext;
 struct  VertexInterpolation;
@@ -23,12 +24,12 @@ struct TrianglePrimitive
     TrianglePrimitive() = default;
     int id{};
     Mesh* mesh{};
+    RenderNode* render_node{};
     int vert_index[3];
     Vec3 v[3];
     Vec3 normal_dir;
-    Vec3 cross_dir;
     float inv_cross_dir_z;
-    float inv_normal_dir_z;
+    Vec3 inv_cross_dir;
     float cache_area;
     bool clipped=false;
     bool discard=false;
@@ -46,6 +47,8 @@ struct TrianglePrimitive
     bool intersect_3D(const L_MATH::Vec<float, 3>& point, const Vec3& dir, RayCasterResult* result);
     bool intersect_2D(const L_MATH::Vec<float, 3>& point, RayCasterResult* result);
     void barycentric(const L_MATH::Vec<float, 3>&, L_MATH::Vec<float, 3>& alpha) const;
+    void barycentric3D(const L_MATH::Vec<float, 3>&, L_MATH::Vec<float, 3>& alpha) const;
+
     void update(const Mat44& mat);
     void update_param();
     void clip();

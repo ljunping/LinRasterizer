@@ -25,7 +25,6 @@ class Material;
 class FragShader : public Resource
 {
     INIT_TYPE(FragShader,Resource)
-
 public:
     DEFINE_UNIFORM(float)
     DEFINE_UNIFORM(int)
@@ -35,7 +34,6 @@ public:
     DEFINE_UNIFORM(Vec2)
     DEFINE_UNIFORM(Mat44)
     DEFINE_UNIFORM(Mat33)
-
     Fragment* fragment_map{};
     int width{}, height{};
     DrawCallContext* draw_call = nullptr;
@@ -76,9 +74,16 @@ public:
     Vec4 run(int frag_index) override;
 };
 
-class NormalTextureLightFragShader : public LightFragShader
+class NormalTextureLightFragShader : public FragShader
 {
-    INIT_TYPE(NormalTextureLightFragShader, LightFragShader)
+    INIT_TYPE(NormalTextureLightFragShader, FragShader)
+public:
+    Vec4 run(int frag_index) override;
+};
+
+class MaterialBRDFFragShader : public FragShader
+{
+    INIT_TYPE(MaterialBRDFFragShader, FragShader)
 public:
     Vec4 run(int frag_index) override;
 };
