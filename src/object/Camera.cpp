@@ -13,6 +13,8 @@
 #include "Mesh.h"
 #include "VertShader.h"
 
+
+
 static void window_resize(Camera* camera)
 {
     auto current_ctx = get_current_ctx();
@@ -27,7 +29,7 @@ static void window_resize(Camera* camera)
         sizeof(Fragment) * w * h * current_ctx->setting.msaa_factor * current_ctx->setting.msaa_factor));
     camera->depth_buff = static_cast<float*>(malloc(
         sizeof(float) * w * h * current_ctx->setting.msaa_factor * current_ctx->setting.msaa_factor));
-    camera->view_frustum.aspect_ratio = w / (float)h;
+    camera->view_frustum.aspect_ratio = w / static_cast<float>(h);
     camera->set_dirty();
 
 }
@@ -131,11 +133,10 @@ static bool compare_transparent_render_node(const RenderNode& a, const RenderNod
 {
     return a.model_matrix[3][2] < b.model_matrix[3][2];
 }
-void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
+
+void Camera::prepare_context(Context*& ctx, DrawCallContext& draw_call_context)
 {
-    clear_dirty();
-    auto ctx = get_current_ctx();
-    DrawCallContext draw_call_context;
+    ctx = get_current_ctx();
     draw_call_context.fragment_map = this->fragment_map;
     draw_call_context.depth_buff = this->depth_buff;
     draw_call_context.frame_buff = ctx->get_frame_buffer(0);
@@ -145,7 +146,110 @@ void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
     draw_call_context.view_world_pos = this->scene_node->get_global_pos();
     draw_call_context.setting.background_color = this->background_color;
     draw_call_context.camera = this;
-    draw_call_context.setting.enable_global_path_trace = ctx->setting.camera_global_path_trace;
+    draw_call_context.host = this;
+}
+
+void Camera::prepare_global_draw_call(std::vector<GPUCmds>& d_cmds, Context* ctx, DrawCallContext& draw_call_context,
+                                      std::vector<RenderNode>& render_nodes)
+{
+    d_cmds.emplace_back(draw_call_context, DRAW);
+    auto& d_cmd = d_cmds.back();
+    for (auto& render_node : render_nodes)
+    {
+        d_cmd.context.add_render_node(render_node);
+    }
+    global_shader = Resource::get_or_create_default_resource<GlobalRayTraceVertShader>();
+    d_cmd.context.vert_shader = global_shader;
+    d_cmd.context.setting.enable_light_interpolation = false;
+    d_cmd.context.setting.build_bvh = true;
+}
+
+void Camera::prepare_untransparent_draw_call(std::vector<GPUCmds>& d_cmds, DrawCallContext& draw_call_context, std::vector<RenderNode>& render_nodes)
+{
+    if (render_nodes.empty())
+    {
+        return;
+    }
+    std::ranges::sort(render_nodes, less_compare_render_node);
+    int pre_index = -1;
+    for (int i = 0; i < render_nodes.size(); ++i)
+    {
+        auto& render_node = render_nodes[i];
+        auto& mesh = render_node.mesh;
+        if (!mesh)
+        {
+            continue;
+        }
+        Mat44 vm = view_mat * render_node.model_matrix;
+        if (!this->view_frustum.box_in_frustum(mesh->get_box(), vm))
+        {
+            continue;
+        }
+        if (pre_index == -1 || !equal_compare_render_node(render_nodes[pre_index], render_node))
+        {
+            d_cmds.emplace_back(draw_call_context, DRAW);
+            d_cmds.back().context.set_mesh_render_params(render_node);
+            d_cmds.back().context.add_render_node( render_node);
+            pre_index = i;
+        }
+        else
+        {
+            d_cmds.back().context.add_render_node(render_node);
+        }
+    }
+}
+
+void Camera::prepare_transparent_draw_call(std::vector<GPUCmds>& d_cmds, DrawCallContext& draw_call_context,
+                                           std::vector<RenderNode>& render_node_transparent)
+{
+    if (render_node_transparent.empty())
+    {
+        return;
+    }
+    std::ranges::sort(render_node_transparent, compare_transparent_render_node);
+    draw_call_context.setting.enable_depth_write = false;
+    for (auto& render_node : render_node_transparent)
+    {
+        auto& mesh = render_node.mesh;
+        if (!mesh)
+        {
+            continue;
+        }
+        Mat44 vm = view_mat * render_node.model_matrix;
+        if (!this->view_frustum.box_in_frustum(mesh->get_box(), vm))
+        {
+            continue;
+        }
+        d_cmds.emplace_back(draw_call_context, DRAW);
+        auto& call_context = d_cmds.back().context;
+        call_context.set_mesh_render_params(render_node);
+        call_context.add_render_node(render_node);
+    }
+}
+
+void Camera::split_render_node(Context* ctx, std::vector<RenderNode>& render_nodes, std::vector<RenderNode>& render_node_transparent )
+{
+    std::vector<RenderNode> render_nodes_all;
+    ctx->render_node_manager->collection_render_node(this, render_nodes_all);
+    for (auto& nodes_all : render_nodes_all)
+    {
+        if (nodes_all.transparent)
+        {
+            render_node_transparent.emplace_back(nodes_all);
+        }
+        else
+        {
+            render_nodes.emplace_back(nodes_all);
+        }
+    }
+}
+
+void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
+{
+    clear_dirty();
+    Context* ctx;
+    DrawCallContext draw_call_context;
+    prepare_context(ctx, draw_call_context);
     if (this->solid_color)
     {
         d_cmds.emplace_back(draw_call_context, 3, CLEAR_FRAG, CLEAR_DEPTH, CLEAR_FRAME_BUFF);
@@ -154,74 +258,15 @@ void Camera::collect_draw_call_cmds(std::vector<GPUCmds>& d_cmds)
         d_cmds.emplace_back(draw_call_context, 2, CLEAR_FRAG, CLEAR_DEPTH);
     }
     std::vector<RenderNode> render_nodes;
-    ctx->render_node_manager->collection_render_node(this, render_nodes, false);
-    if (ctx->setting.camera_global_path_trace)
+    std::vector<RenderNode> render_node_transparent;
+    split_render_node(ctx, render_nodes, render_node_transparent);
+    if (draw_call_context.setting.enable_global_path_trace)
     {
-        d_cmds.emplace_back(draw_call_context, DRAW);
-        auto& d_cmd = d_cmds.back();
-        d_cmd.context.global_ray_trace_render_nodes.assign(render_nodes.begin(), render_nodes.end());
-        d_cmd.context.vert_shader = COPY_OBJECT(Resource::get_or_create_resource<GlobalRayTraceVertShader>(
-            "GlobalRayTraceVertShader.frag"));
-        d_cmd.context.setting.enable_light_interpolation = false;
-        for (auto render_node : render_nodes)
-        {
-            auto mesh = Resource::get_resource<Mesh>(render_node.mesh);
-            d_cmd.context.meshes.emplace_back(mesh, render_node.model_matrix);
-        }
+        prepare_global_draw_call(d_cmds, ctx, draw_call_context, render_nodes);
         return;
     }
-    if (!render_nodes.empty())
-    {
-        bool first_draw_cmd = true;
-        std::ranges::sort(render_nodes, less_compare_render_node);
-        for (auto render_node : render_nodes)
-        {
-            auto mesh = Resource::get_resource<Mesh>(render_node.mesh);
-
-            if(!mesh)
-            {
-                continue;
-            }
-            Mat44 vm = view_mat * render_node.model_matrix;
-            if (!this->view_frustum.box_in_frustum(mesh->get_box(), vm))
-            {
-                continue;
-            }
-            if (d_cmds.empty() || first_draw_cmd)
-            {
-                first_draw_cmd = false;
-                d_cmds.emplace_back(draw_call_context, DRAW);
-            }
-            if (!d_cmds.back().context.try_add_render_node(render_node))
-            {
-                d_cmds.emplace_back(draw_call_context, DRAW);
-                d_cmds.back().context.try_add_render_node(render_node);
-            }
-        }
-        render_nodes.clear();
-    }
-    ctx->render_node_manager->collection_render_node(this, render_nodes, true);
-    if (!render_nodes.empty())
-    {
-        bool first_draw_cmd = true;
-        std::ranges::sort(render_nodes, compare_transparent_render_node);
-        draw_call_context.setting.enable_depth_write = false;
-        for (auto render_node : render_nodes)
-        {
-            auto mesh = Resource::get_resource<Mesh>(render_node.mesh);
-            if(!mesh)
-            {
-                continue;
-            }
-            Mat44 vm = view_mat * render_node.model_matrix;
-            if (!this->view_frustum.box_in_frustum(mesh->get_box(), vm))
-            {
-                continue;
-            }
-            d_cmds.emplace_back(draw_call_context, DRAW);
-            d_cmds.back().context.try_add_render_node(render_node);
-        }
-    }
+    prepare_untransparent_draw_call(d_cmds, draw_call_context, render_nodes);
+    prepare_transparent_draw_call(d_cmds, draw_call_context, render_node_transparent);
 }
 
 

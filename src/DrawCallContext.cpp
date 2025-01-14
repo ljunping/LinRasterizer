@@ -3,149 +3,110 @@
 //
 
 #include "DrawCallContext.h"
-
 #include "BVHTree.h"
 #include "Geometry.h"
-#include "Camera.h"
 #include "Context.h"
-#include "FragShader.h"
-#include "RasterizerJob.h"
-#include "Resource.h"
-#include "TrianglePrimitive.h"
-#include "VertShader.h"
 #include "CommonMacro.h"
-#include "Light.h"
 #include "Mesh.h"
 #include "Transform.h"
+#include "Material.h"
+#include "Texture.h"
+#include "FragShader.h"
+#include "VertShader.h"
 
 
-void DrawCallContext::generate_triangle_primitive(TrianglePrimitive& tri)
-{
-    for (int i = 0; i < 3; ++i)
-    {
-        auto vert_index = this->get_muti_mesh_vert_index(tri.mesh, tri.vert_index[i]);
-        Vec4& v = static_cast<L_MATH::Vec<float, 4>&>(tri.v[i]);
-        v = this->gl_positions[vert_index];
-        tri.render_node = &this->get_render_node(tri.mesh);
-    }
-    tri.update_param();
-}
-
-bool DrawCallContext::try_add_render_node(RenderNode& node)
-{
-    set_render_node(node);
-    if (!equal_compare_render_node(node, render_node))
-    {
-        return false;
-    }
-    auto resource = Resource::get_resource<Mesh>(node.mesh);
-    if (resource == nullptr)
-    {
-        return false;
-    }
-    meshes.emplace_back(resource, node.model_matrix);
-    return true;
-}
-
-void DrawCallContext::set_render_node(const RenderNode& node)
-{
-    if (!is_set_render_node)
-    {
-        is_set_render_node = true;
-        render_node = node;
-        for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
-        {
-            this->materials[i] = Resource::get_resource<Material>(node.materials[i]);
-        }
-        for (int i = 0; i < MAX_TEXTURES_COUNT; ++i)
-        {
-            this->textures[i] = Resource::get_resource<Texture>(node.textures[i]);
-        }
-        this->frag_shader = Resource::get_resource<FragShader>(node.frag_shader);
-        this->vert_shader = Resource::get_resource<VertShader>(node.vert_shader);
-    }
-}
 
 DrawCallContext::~DrawCallContext()
 {
-    free(this->tri_pool);
+    for (int i = 0; i < GeometryCount; ++i)
+    {
+        free(this->geometrie_pools[i]);
+    }
     free(this->gl_positions);
     free(this->outputs);
     delete bvh_tree;
 }
 
-void DrawCallContext::assign_triangle_primitives(int size)
+void DrawCallContext::set_mesh_render_params(const RenderNode& node)
 {
-    if (primitives.size() != size)
+    for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
     {
-        primitives.resize(size);
-        free(this->tri_pool);
-        this->tri_pool = static_cast<TrianglePrimitive*>(malloc(size * sizeof(TrianglePrimitive)));
+        this->materials[i] = node.materials[i];
     }
+    for (int i = 0; i < MAX_TEXTURES_COUNT; ++i)
+    {
+        this->textures[i] = node.textures[i];
+    }
+    this->frag_shader = node.frag_shader;
+    this->vert_shader = node.vert_shader;
 }
 
 
-
-Mat44 DrawCallContext::get_model_matrix(Mesh* mesh) const
+void DrawCallContext::add_render_node(RenderNode& node)
 {
-    for (auto _mesh : meshes)
+    auto resource = node.mesh;
+    this->nodes.emplace_back(node);
+    if (node.emit)
     {
-        if (_mesh.first == mesh)
-        {
-            return _mesh.second;
-        }
+        emit_render_node.emplace_back(this->nodes.size() - 1);
+    };
+    if (resource != nullptr)
+    {
+        this->mesh_2_node[resource.get()] = this->nodes.size() - 1;
+        this->meshes.emplace_back(resource);
+        this->mesh_2_index[resource.get()] = this->meshes.size() - 1;
+        this->mesh_vert_count.push_back(resource->vert_count + this->mesh_vert_count.back());
+        this->mesh_tri_count.push_back(resource->tri_count() + this->mesh_tri_count.back());
     }
-    return L_MATH::Mat<float, 4, 4>::IDENTITY;
 }
 
-RenderNode& DrawCallContext::get_render_node(Mesh* mesh)
+RenderNode* DrawCallContext::get_render_node(Mesh* mesh)
 {
-    if (this->setting.enable_global_path_trace)
-    {
-        for (auto& render_node : global_ray_trace_render_nodes)
-        {
-            if (render_node.mesh == mesh->get_instance_id())
-            {
-                return render_node;
-            }
-        }
-    }
-    return render_node;
+    auto ptr = mesh_2_node.find(mesh);
+    RUNTIME_ASSERT(ptr != mesh_2_node.end(),"get_render_node ptr != mesh_2_node.end()");
+    return &this->nodes[ptr->second];
 }
 
 
-Mesh* DrawCallContext::get_mesh(int vert_index,int& mesh_index) const
+std::shared_ptr<Mesh> DrawCallContext::get_mesh(int vert_index, int& mesh_vert_index) const
 {
-    for (auto mesh : meshes)
+    auto _upper_bound = std::upper_bound(mesh_vert_count.begin() + 1, mesh_vert_count.end(), vert_index);
+    if (_upper_bound != mesh_vert_count.end())
     {
-        mesh_index = vert_index;
-        if (mesh.first->vert_count > vert_index)
-        {
-            return mesh.first;
-        }
-        vert_index -= mesh.first->vert_count;
+        auto _mesh_index = _upper_bound - mesh_vert_count.begin() - 1;
+        mesh_vert_index = vert_index - (*(_upper_bound - 1));
+        return meshes[_mesh_index];
     }
     return nullptr;
 }
 
-int DrawCallContext::get_muti_mesh_vert_index(const Mesh* mesh, int mesh_index) const
+std::shared_ptr<Mesh> DrawCallContext::get_mesh_by_tri_index(int tri_index, int& mesh_tri_index) const
 {
-    int vert_index = 0;
-    for (auto mesh_ : meshes)
+    auto _upper_bound = std::upper_bound(mesh_tri_count.begin() + 1, mesh_tri_count.end(), tri_index);
+    if (_upper_bound != mesh_tri_count.end())
     {
-        if (mesh_.first != mesh)
-        {
-            vert_index += mesh_.first->vert_count;
-        }
-        else
-        {
-            vert_index += mesh_index;
-            break;
-        }
+        auto _mesh_index = _upper_bound - mesh_tri_count.begin() - 1;
+        mesh_tri_index = tri_index - (*(_upper_bound - 1));
+        RUNTIME_ASSERT(_mesh_index<meshes.size(), "Mesh index is out of range");
+        return meshes[_mesh_index];
     }
-    return vert_index;
+    return nullptr;
 }
 
+int DrawCallContext::get_mesh_vert_index( Mesh* mesh, int mesh_index)
+{
+    auto ptr = this->mesh_2_index.find(mesh);
+    RUNTIME_ASSERT(ptr!=this->mesh_2_index.end(),"get_mesh_vert_index ptr != mesh_2_index.end()");
+    RUNTIME_ASSERT(ptr->second<this->mesh_vert_count.size(), "get_mesh_vert_index ptr->second < mesh_vert_count.size()");
+    return this->mesh_vert_count[ptr->second] + mesh_index;
+}
+
+void DrawCallContext::get_tri_mesh_index(int tri_count, TrianglePrimitive& tri)
+{
+    int mesh_tri_index = 0;
+    auto mesh = get_mesh_by_tri_index(tri_count, mesh_tri_index);
+    mesh->generate_triangle_index(tri, mesh_tri_index);
+}
 
 
 template void DrawCallContext::get_vert_attribute_value(Mesh*,int vert_index, int attribute_index,
@@ -154,9 +115,9 @@ template void DrawCallContext::get_vert_attribute_value(Mesh*,int vert_index, in
                                                         L_MATH::Vec<float, 2>& result);
 template void DrawCallContext::get_vert_attribute_value(Mesh*,int vert_index, int attribute_index,
                                                         L_MATH::Vec<float, 3>& result);
-
 template void DrawCallContext::get_vert_attribute_value(Mesh*,int vert_index, int attribute_index,
                                                         L_MATH::Vec<float, 4>& result);
+
 
 template <int N>
 void DrawCallContext::get_vert_attribute_value(Mesh* mesh,int vert_index,int attribute_index, L_MATH::Vec<float, N>& result)
@@ -178,6 +139,9 @@ void DrawCallContext::create_vert_attribute(Mesh* mesh, int v0, int v1, int v2, 
     result.mesh_ptr = mesh;
     result.calculate_values();
 }
+
+
+
 
 template void VertexInterpolation::get_attribute_value(int attribute_index,L_MATH::Vec<float, 4>& result);
 template void VertexInterpolation::get_attribute_value(int attribute_index,L_MATH::Vec<float, 3>& result);

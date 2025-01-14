@@ -25,6 +25,18 @@ class Camera : public DrawCallNodeComponent
     Mat44 proj_mat;
     Mat44 proj_view;
     bool dirty = true;
+    void prepare_context(Context*& ctx, DrawCallContext& draw_call_context);
+    void prepare_global_draw_call(std::vector<GPUCmds>& d_cmds, Context* ctx, DrawCallContext& draw_call_context,
+                                  std::vector<RenderNode>& render_nodes);
+    void prepare_untransparent_draw_call(std::vector<GPUCmds>& d_cmds, DrawCallContext& draw_call_context,
+                                         std::vector<RenderNode>& render_nodes);
+    void prepare_transparent_draw_call(std::vector<GPUCmds>& d_cmds, DrawCallContext& draw_call_context,
+                                       std::vector<RenderNode>& render_node_transparent);
+    void split_render_node(Context* ctx, std::vector<RenderNode>& render_nodes,
+                           std::vector<RenderNode>& render_node_transparent);
+
+    SHARE_PTR<GlobalRayTraceVertShader> global_shader;
+
 public:
     ~Camera() override;
     Frustum view_frustum;
@@ -33,7 +45,6 @@ public:
     Fragment* fragment_map{};
     float* depth_buff{};
     Color background_color = BLACK;
-    bool enable_ray_cast = false;
     Mat44& get_view_mat();
     Mat44& get_proj_mat();
     void set_dirty();

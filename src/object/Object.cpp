@@ -17,6 +17,7 @@ std::unordered_map<int, Object* (*)()> TypeFactory::type_creator_map;
 std::unordered_map<int, int> TypeFactory::parent_map;
 std::unordered_map<int, Object*> TypeFactory::objet_inst_map;
 int TypeFactory::objet_inst_id = 0;
+std::unordered_map<int, WEAK_PTR<Object>> TypeFactory::weak_ptr_objet_inst_map;
 
 DEFINE_TYPE(Object)
 DEFINE_TYPE(Component)
@@ -45,6 +46,11 @@ DEFINE_TYPE(MaterialBRDFFragShader)
 DEFINE_TYPE(BliPhongMaterial)
 DEFINE_TYPE(LambertianMaterial)
 DEFINE_TYPE(GlobalRayTraceVertShader)
+DEFINE_TYPE(GeometryRender)
+DEFINE_TYPE(MetalMaterial)
+DEFINE_TYPE(DiffuseLightMaterial)
+DEFINE_TYPE(PureColorTexture)
+
 
 int Object::register_type()
 {
@@ -60,7 +66,7 @@ int Object::get_instance_id() const
 int Object::inst_get_type_id()
 {return type_id;}
 
-Object* Object::create_Object()
+Object* Object::create()
 {
     return new Object();
 }
@@ -79,8 +85,6 @@ int TypeFactory::get_parent_type(int type_id)
     }
     return 0;
 }
-
-
 
 bool TypeFactory::subclass(int parent_id, int child_type_id)
 {
@@ -106,15 +110,32 @@ Object* TypeFactory::create_type_inst_by_id(int type_id)
 }
 
 
-
 Object* TypeFactory::get_type_inst_by_inst_id(int inst_id)
 {
     const auto it = objet_inst_map.find(inst_id);
     return (it != objet_inst_map.end()) ? it->second : nullptr;
 }
 
+std::shared_ptr<Object> TypeFactory::get_shared_ptr_by_inst_id(int inst_id)
+{
+    auto it = weak_ptr_objet_inst_map.find(inst_id);
+    if (it != weak_ptr_objet_inst_map.end())
+    {
+        if (auto object = it->second.lock())
+        {
+            return object;
+        }
+    }
+    return nullptr;
+}
+
+#if DEBUG
+std::vector<Object*> debug_objects(1000);
+#endif
+
 void TypeFactory::RegisterTypes()
 {
+    REGISTER_TYPE(Object)
     REGISTER_TYPE(Component)
     REGISTER_TYPE(Transform)
     REGISTER_TYPE(FragShader)
@@ -141,6 +162,10 @@ void TypeFactory::RegisterTypes()
     REGISTER_TYPE(BliPhongMaterial)
     REGISTER_TYPE(LambertianMaterial)
     REGISTER_TYPE(GlobalRayTraceVertShader)
+    REGISTER_TYPE(GeometryRender)
+    REGISTER_TYPE(MetalMaterial)
+    REGISTER_TYPE(DiffuseLightMaterial)
+    REGISTER_TYPE(PureColorTexture)
 }
 
 

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
+#include <random>
 #include <stdexcept>
 
 //MACRO DEFINE
@@ -142,6 +143,13 @@ p1[i]=p1[i] operate p2[i];\
             result.data[1] = data[1] OPT other.data[1];\
             result.data[2] = data[2] OPT other.data[2];\
         }\
+        if constexpr (MIN_RC<COL, COL2> == 4)\
+        {\
+            result.data[0] = data[0] OPT other.data[0];\
+            result.data[1] = data[1] OPT other.data[1];\
+            result.data[2] = data[2] OPT other.data[2];\
+            result.data[3] = data[3] OPT other.data[3];\
+        }\
         else\
         {\
             for (int i = 0; i < MIN_RC<COL, COL2>; ++i)\
@@ -165,6 +173,13 @@ p1[i]=p1[i] operate p2[i];\
             result.data[0] = data[0] OPT other;\
             result.data[1] = data[1] OPT other;\
             result.data[2] = data[2] OPT other;\
+        }\
+        if constexpr (COL == 4)\
+        {\
+            result.data[0] = data[0] OPT other;\
+            result.data[1] = data[1] OPT other;\
+            result.data[2] = data[2] OPT other;\
+            result.data[3] = data[3] OPT other;\
         }\
         else\
         {\
@@ -191,6 +206,14 @@ p1[i]=p1[i] operate p2[i];\
             data[2] OPT##= other;\
             return;\
         }\
+        if constexpr (COL == 4)\
+        {\
+            data[0] OPT##= other;\
+            data[1] OPT##= other;\
+            data[2] OPT##= other;\
+            data[3] OPT##= other;\
+            return;\
+        }\
         for (int i = 0; i < COL; ++i)\
         {\
             data[i] OPT##= other;\
@@ -211,6 +234,14 @@ p1[i]=p1[i] operate p2[i];\
             data[0] OPT##= other[0];\
             data[1] OPT##= other[1];\
             data[2] OPT##= other[2];\
+            return;\
+        }\
+        if constexpr (MIN_RC<COL, COL2> == 4)\
+        {\
+            data[0] OPT##= other[0];\
+            data[1] OPT##= other[1];\
+            data[2] OPT##= other[2];\
+            data[3] OPT##= other[3];\
             return;\
         }\
         for (int i = 0; i < MIN_RC<COL, COL2>; ++i)\
@@ -236,6 +267,14 @@ p1[i]=p1[i] operate p2[i];\
             res[2]= ::FUNCTOR(vec1[2],vec2[2]);\
             return res;\
         }\
+        if constexpr (Col == 4)\
+        {\
+            res[0]= ::FUNCTOR(vec1[0],vec2[0]);\
+            res[1]= ::FUNCTOR(vec1[1],vec2[1]);\
+            res[2]= ::FUNCTOR(vec1[2],vec2[2]);\
+            res[3]= ::FUNCTOR(vec1[3],vec2[3]);\
+            return res;\
+        }\
         for (int j = 0; j < Col; ++j)\
         {\
             res[j] = ::FUNCTOR(vec1[j],vec2[j]);\
@@ -258,6 +297,14 @@ p1[i]=p1[i] operate p2[i];\
             res[0]= ::FUNCTOR(vec1[0] FUNC_PARAM_USING(__VA_ARGS__));\
             res[1]= ::FUNCTOR(vec1[1] FUNC_PARAM_USING(__VA_ARGS__));\
             res[2]= ::FUNCTOR(vec1[2] FUNC_PARAM_USING(__VA_ARGS__));\
+            return res;\
+        }\
+        if constexpr (Col == 4)\
+        {\
+            res[0]= ::FUNCTOR(vec1[0] FUNC_PARAM_USING(__VA_ARGS__));\
+            res[1]= ::FUNCTOR(vec1[1] FUNC_PARAM_USING(__VA_ARGS__));\
+            res[2]= ::FUNCTOR(vec1[2] FUNC_PARAM_USING(__VA_ARGS__));\
+            res[3]= ::FUNCTOR(vec1[3] FUNC_PARAM_USING(__VA_ARGS__));\
             return res;\
         }\
         for (int j = 0; j < Col; ++j)\
@@ -450,6 +497,7 @@ namespace L_MATH
         }
 
         T dot(const Vec<T, Col>& other) const;
+        Vec cross(const Vec<T, Col>& other) const;
         T magnitude() const;
         T sqrt_magnitude() const;
         T invert_sqrt_magnitude() const;
@@ -837,6 +885,12 @@ namespace L_MATH
     }
 
     template <typename T, int Col>
+    Vec<T, Col> Vec<T, Col>::cross(const Vec<T, Col>& other) const
+    {
+        return L_MATH::cross(*this, other);
+    }
+
+    template <typename T, int Col>
     T Vec<T, Col>::magnitude() const
     {
         return dot(*this);
@@ -913,11 +967,19 @@ namespace L_MATH
         auto _to = to.normalize();
         auto up_sn = cross(left, _to);
         float _up_sn_l = up_sn.sqrt_magnitude();
+        Vec3 up;
         if (_up_sn_l < EPSILON)
         {
-            return Mat<float, 4, 4>::IDENTITY;
+            if (dot(from, to) > 0)
+            {
+                return Mat44::IDENTITY;
+            }
+            Vec3 basis = (std::abs(from[0]) < std::abs(from[1])) ? Vec3{1, 0, 0} : Vec3{0, 1, 0};
+            up = cross(basis, to).normalize();
+        }else
+        {
+            up = up_sn / _up_sn_l;
         }
-        auto up = up_sn / _up_sn_l;
         auto forward = cross(left, up);
         float cs = dot(left, _to);
         float sn = dot(forward, _to);
@@ -1048,7 +1110,7 @@ namespace L_MATH
     }
 
     template <class T>
-    inline T linear4(T& a, T& b, T& c, T& d, const Vec4& alpha)
+    inline T linear4(const T& a, const T& b, const T& c, const T& d, const Vec4& alpha)
     {
         return (T)(a * alpha[0] + b * alpha[1] + c * alpha[2] + d * alpha[3]);
     }
@@ -1082,7 +1144,7 @@ namespace L_MATH
         v = v.mul_transpose(static_cast<const Mat33&>(mat));
     }
 
-    inline Vec3 pos3_dot_mat33(Vec3& v, const Mat44& mat)
+    inline Vec3 pos3_dot_mat33(const Vec3& v, const Mat44& mat)
     {
         Vec3 _v = v;
         _v = _v.mul_transpose(static_cast<const Mat33&>(mat));
@@ -1097,6 +1159,11 @@ namespace L_MATH
             L_MATH::rotate(L_MATH::UP, r[1]) *
             L_MATH::rotate(L_MATH::LEFT, r[0]) *
             L_MATH::scale(s);
+    }
+
+    inline Vec3 reflect(const Vec3& l, const Vec3& normal)
+    {
+        return l - normal * 2 * dot(l, normal);
     }
 
     inline float determinant(const Mat44& m)
@@ -1232,7 +1299,32 @@ namespace L_MATH
         // return M_inv;
     }
 
+    inline thread_local std::mt19937 gen(std::random_device{}());
 
+    inline float random() {
+        std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+        return dis(gen);
+    }
+    inline int rand_int(int min, int max)
+    {
+        std::uniform_int_distribution<int> dis(min, max);
+        return dis(gen);
+    }
+    inline Vec3 random_unit_vector()
+    {
+        float cos_beta = 1 - 2 * random();
+        float sin_beta = sqrt(1 - cos_beta * cos_beta);
+        float theta = 2 * PI * random();
+        return {sin_beta * std::cos(theta), sin_beta * std::sin(theta), cos_beta};
+    }
+
+    inline Vec3 random_cosine_direction()
+    {
+        float seta = L_MATH::random() * 2 * PI;
+        float cos_beta = sqrt(1 - L_MATH::random());
+        float sin_beta = sqrt(1 - cos_beta * cos_beta);
+        return Vec3(sin_beta * std::cos(seta), sin_beta * std::sin(seta), cos_beta);
+    }
 
 }
 

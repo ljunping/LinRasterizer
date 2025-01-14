@@ -8,9 +8,9 @@
 #include "JobSystem.h"
 
 
-static void execute_init_lay0_mipmap(size_t begin, size_t end, void *global)
+void Texture::execute_init_lay0_mipmap(size_t begin, size_t end, void* global)
 {
-    Texture *texture = (Texture *)global;
+    Texture* texture = (Texture*)global;
     auto& mip_map_layer = texture->mip_maps[0];
     int wpt2 = mip_map_layer.width;
     int hpt2 = mip_map_layer.height;
@@ -40,13 +40,13 @@ static void execute_init_lay0_mipmap(size_t begin, size_t end, void *global)
     }
 }
 
-void execute_init_lay_mipmap(size_t data_begin, size_t data_end, void * global_data)
+void Texture::execute_init_lay_mipmap(size_t data_begin, size_t data_end, void* global_data)
 {
-    auto *data = (std::tuple<Texture *, int> *)(global_data);
+    auto* data = (std::tuple<Texture*, int>*)(global_data);
     Texture* texture = std::get<0>(*data);
     int level = std::get<1>(*data);
-    auto &texture_layers = texture->mip_maps;
-    auto &texture_layer = texture_layers[level];
+    auto& texture_layers = texture->mip_maps;
+    auto& texture_layer = texture_layers[level];
     int w = (texture_layer.width);
     const unsigned char *tx0, *tx1, *tx2, *tx3;
     Vec4 alpha{0.25, 0.25, 0.25, 0.25};
@@ -65,7 +65,6 @@ void execute_init_lay_mipmap(size_t data_begin, size_t data_end, void * global_d
             texture_layer.data[texture->channels * index + k] = L_MATH::linear4(tx0[k], tx1[k], tx2[k], tx3[k], alpha);
         }
     }
-
 }
 
 
@@ -99,7 +98,7 @@ void Texture::texture_mipmap_minify(int x, int y, int level, const unsigned char
     result = mip_map.data + index;
 }
 
-void Texture::texture_mipmap_magnify(int x, int y, int level, unsigned char *&result)
+void Texture::texture_mipmap_magnify(int x, int y, int level, Vec4& result)
 {
     float delta = 1.0 / (1 << level);
     auto lay0_x = x >> level;
@@ -115,11 +114,12 @@ void Texture::texture_mipmap_magnify(int x, int y, int level, unsigned char *&re
     L_MATH::alpha4(alpha_x, alpha_y, alpha);
     for (int i = 0; i < channels; ++i)
     {
-        result[i] = L_MATH::linear4(tx0[i], tx1[i], tx2[i], tx3[i], alpha);
+        result[i] = L_MATH::linear4(tx0[i] * 1.0 / 255, tx1[i] * 1.0 / 255, tx2[i] * 1.0 / 255, tx3[i] * 1.0 / 255,
+                                    alpha);
     }
 }
 
-void Texture::texture_mipmap_minify(const L_MATH::Vec<float, 2> &uv, int level,  unsigned char *&result)
+void Texture::texture_mipmap_minify(const L_MATH::Vec<float, 2>& uv, int level, Vec4& result)
 {
     level = std::min(level, (int)(mip_maps.size() - 1));
     auto height = mip_maps[level].height;
@@ -130,11 +130,11 @@ void Texture::texture_mipmap_minify(const L_MATH::Vec<float, 2> &uv, int level, 
     texture_mipmap_minify(x, y, level, res);
     for (int i = 0; i < channels; ++i)
     {
-        result[i] = res[i];
+        result[i] = res[i] * 1.0 / 255;
     }
 }
 
-void Texture::texture_mipmap_minify_linear(const L_MATH::Vec<float, 2>& uv, int level, unsigned char*& result)
+void Texture::texture_mipmap_minify_linear(const L_MATH::Vec<float, 2>& uv, int level, Vec4& result)
 {
     level = std::min(level, (int)(mip_maps.size() - 1));
     auto height = mip_maps[level].height;
@@ -152,11 +152,13 @@ void Texture::texture_mipmap_minify_linear(const L_MATH::Vec<float, 2>& uv, int 
     texture_mipmap_minify(x + 1, y + 1, level, tx3);
     for (int i = 0; i < channels; ++i)
     {
-        result[i] = L_MATH::linear4(tx0[i], tx1[i], tx2[i], tx3[i], alpha);
+        result[i] = L_MATH::linear4(tx0[i] * 1.0f / 255, tx1[i] * 1.0f / 255, tx2[i] * 1.0f / 255, tx3[i] * 1.0f / 255,
+                                    alpha);
+
     }
 }
 
-void Texture::texture_mipmap_magnify(const L_MATH::Vec<float, 2> &uv, int level, unsigned char *&result)
+void Texture::texture_mipmap_magnify(const L_MATH::Vec<float, 2> &uv, int level, Vec4& result)
 {
     if(level==0)
     {
@@ -170,9 +172,9 @@ void Texture::texture_mipmap_magnify(const L_MATH::Vec<float, 2> &uv, int level,
     texture_mipmap_magnify(x, y, level, result);
 }
 
-void Texture::texture_mipmap_magnify_linear(const L_MATH::Vec<float, 2>& uv, int level, unsigned char*& result)
+void Texture::texture_mipmap_magnify_linear(const L_MATH::Vec<float, 2>& uv, int level, Vec4& result)
 {
-    if(level==0)
+    if (level == 0)
     {
         texture_mipmap_minify_linear(uv, level, result);
         return;
@@ -186,10 +188,7 @@ void Texture::texture_mipmap_magnify_linear(const L_MATH::Vec<float, 2>& uv, int
     Vec4 alpha;
     L_MATH::alpha4(alpha_x, alpha_y, alpha);
 
-    auto *tx0=new unsigned char[this->channels];
-    auto *tx1=new unsigned char[this->channels];
-    auto *tx2=new unsigned char[this->channels];
-    auto *tx3=new unsigned char[this->channels];
+    Vec4 tx0, tx1, tx2, tx3;
 
     texture_mipmap_magnify(x, y, level, tx0);
     texture_mipmap_magnify(x + 1, y, level, tx1);
@@ -199,10 +198,6 @@ void Texture::texture_mipmap_magnify_linear(const L_MATH::Vec<float, 2>& uv, int
     {
         result[i] = L_MATH::linear4(tx0[i], tx1[i], tx2[i], tx3[i], alpha);
     }
-    delete[] tx0;
-    delete[] tx1;
-    delete[] tx2;
-    delete[] tx3;
 }
 
 
@@ -253,7 +248,7 @@ void Texture::generate_mipmaps()
     JOB_SYSTEM.wait_job_group_finish(lay_pre_fence);
 }
 
-void Texture::sample(const L_MATH::Vec<float, 2> &uv, const Vec2 &lodv, unsigned char *result)
+void Texture::sample(const L_MATH::Vec<float, 2> &uv, const Vec2 &lodv, Vec4& result)
 {
     if (!mipmap)
     {
@@ -282,6 +277,36 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, const Vec2 &lodv, unsigned
     }else
     {
         sample(uv, lod, result);
+    }
+}
+
+void Texture::sample_linear(const L_MATH::Vec<float, 2>& uv, float lod, L_MATH::Vec<float, 4>& result)
+{
+    if (lod <= 0)
+    {
+        lod = abs(lod);
+        int l = floor(lod);
+        float alpha = lod - l;
+        Vec4 result1;
+        texture_mipmap_magnify_linear(uv, l, result);
+        texture_mipmap_magnify_linear(uv, l + 1, result1);
+        for (int i = 0; i < channels; ++i)
+        {
+            result[i] = result[i] * (1 - alpha) + result1[i] * alpha;
+        }
+    }
+    else
+    {
+        int l = floor(lod);
+        float alpha = lod - l;
+        Vec4 tx1;
+        Vec4 tx2;
+        texture_mipmap_magnify_linear(uv, l, tx1);
+        texture_mipmap_magnify_linear(uv, l + 1, tx2);
+        for (int i = 0; i < channels; ++i)
+        {
+            result[i] = tx1[i] * (1 - alpha) + tx2[i] * alpha;
+        }
     }
 }
 
@@ -321,42 +346,7 @@ Texture::Texture(std::shared_ptr<unsigned char[]>& data,int w,int h,int channel,
     }
 }
 
-void Texture::sample_linear(const L_MATH::Vec<float, 2>& uv, float lod, unsigned char* result)
-{
-    if (lod <= 0)
-    {
-        lod = abs(lod);
-        int l = floor(lod);
-        float alpha = lod - l;
-        auto tx1 = new unsigned char[this->channels];
-        auto tx2 = new unsigned char[this->channels];
-        texture_mipmap_magnify_linear(uv, l, tx1);
-        texture_mipmap_magnify_linear(uv, l + 1, tx2);
-        for (int i = 0; i < channels; ++i)
-        {
-            result[i] = tx1[i] * (1 - alpha) + tx2[i] * alpha;
-        }
-        delete[] tx1;
-        delete[] tx2;
-    }
-    else
-    {
-        int l = floor(lod);
-        float alpha = lod - l;
-        auto tx1 = new unsigned char[this->channels];
-        auto tx2 = new unsigned char[this->channels];
-        texture_mipmap_magnify_linear(uv, l, tx1);
-        texture_mipmap_magnify_linear(uv, l + 1, tx2);
-        for (int i = 0; i < channels; ++i)
-        {
-            result[i] = tx1[i] * (1 - alpha) + tx2[i] * alpha;
-        }
-        delete[] tx1;
-        delete[] tx2;
-    }
-}
-
-void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *result)
+void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, Vec4& result)
 {
     if (lod <= 0)
     {
@@ -370,6 +360,25 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, unsigned char *
         texture_mipmap_magnify(uv, l, result);
     }
 }
+
+
+PureColorTexture::PureColorTexture(const L_MATH::Vec<float, 4>& color): color(color)
+{
+}
+
+void PureColorTexture::sample(const L_MATH::Vec<float, 2>& uv, float lod, L_MATH::Vec<float, 4>& result)
+{
+    result = color;
+}
+
+void PureColorTexture::sample(const L_MATH::Vec<float, 2>& uv, const L_MATH::Vec<float, 2>& lodv,
+    L_MATH::Vec<float, 4>& result)
+{
+    result = color;
+}
+
+
+
 
 
 

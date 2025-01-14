@@ -22,7 +22,7 @@ void VertShader::run(DrawCallContext* context,int vert_index)
 
     int mesh_index = 0;
     auto mesh = context->get_mesh(vert_index, mesh_index);
-    Mat44 model_mat = context->get_model_matrix(mesh);
+    Mat44 model_mat = context->get_render_node(mesh.get())->model_matrix;
     const Mat44& view_mat = context->view_matrix;
     const Mat44& projection_mat = context->proj_matrix;
     Vec3 pos, normal;
@@ -70,7 +70,7 @@ void LightShadowMapVertShader::run(DrawCallContext* context, int vert_index)
 {
     int mesh_index = 0;
     auto mesh = context->get_mesh(vert_index, mesh_index);
-    Mat44 model_mat = context->get_model_matrix(mesh);
+    Mat44 model_mat = context->get_render_node(mesh.get())->model_matrix;
     const Mat44& view_mat = context->view_matrix;
     const Mat44& projection_mat = context->proj_matrix;
     Vec3 pos;
@@ -89,7 +89,7 @@ void GlobalRayTraceVertShader::run(DrawCallContext* context, int vert_index)
 {
     int mesh_index = 0;
     auto mesh = context->get_mesh(vert_index, mesh_index);
-    Mat44 model_mat = context->get_model_matrix(mesh);
+    Mat44& model_mat = context->get_render_node(mesh.get())->model_matrix;
     Vec3 pos, normal;
     mesh->get_attribute_value(mesh_index, POS, pos);
     mesh->get_attribute_value(mesh_index, NORMAL, normal);

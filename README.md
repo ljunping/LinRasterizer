@@ -35,89 +35,55 @@ make
 ###### 2、扫描线光栅化
 实现了Sutherland_Hodgman视椎体裁剪算法，基于Bresenham画线算法实现多边形光栅化
 
-![simple_tri_clip.png](render_img/simple_tri_clip.png)
+<img alt="simple_tri_clip.png" height="400" src="render_img/simple_tri_clip.png" width="500"/>
 
 ###### 3、光线投射
 通过BVH和优先队列加速RayCast(光线投射)
 ###### 4、纹理加载
 基于"stb_image.h"开源库，读取图片数据。实现magnify、minify、mipmap等纹理基本功能
 
-![mipmap_compare.png](render_img/mipmap_compare.png)
+<img alt="mipmap_compare.png" height="400" src="render_img/mipmap_compare.png" width="800"/>
+
 ###### 5、.obj模型加载
 基于Assimp库加载obj模型，转换为自定义mesh。下图加载了"resources/pig/16433_Pig.obj"文件
-![img.png](render_img/img_obj.png)
+<img alt="img.png" height="400" src="render_img/img_obj.png" width="500"/>
 
 ###### 6、MSAA抗锯齿
-实现了MSAA抗锯齿，开启4倍MSAA前后的对比
 
-![msaa_compare.png](render_img/msaa_compare.png)
+实现了MSAA抗锯齿，开启4倍MSAA前后的对比,通过MSAA实现边缘提取
 
-通过MSAA实现边缘提取
+<img alt="msaa_compare.png" height="400" src="render_img/msaa_compare.png" width="500"/>
 
-![msaa_edge.png](render_img/msaa_edge.png)
+<img alt="msaa_edge.png" height="400" src="render_img/msaa_edge.png" width="500"/>
 
 ###### 7、JobSystem并行
 实现了任务并行化、任务调取、任务窃取机制。具体性能数据列于性能测试
 ###### 8、透明渲染支持
 
-![transparent_render.png](render_img/transparent_render.png)
+<img alt="transparent_render.png" height="400" src="render_img/transparent_render.png" width="500"/>
 
 ###### 9、ECS架构
 类似UNITY引擎，具备GetComponent<T>()、RemoveComponent<T>等基本方法。实现了Transform、Camera、MeshRender等核心组件。
 下面多meshRender的效果
 
+<img alt="muti_obj.png" height="400" src="render_img/muti_obj.png" width="500"/>
+
 ###### 10、phong光照模型、凹凸贴图支持
 
-![phong_light.png](render_img/phong_light.png)
-
-![normal_texture.png](render_img/normal_texture.png)
+<img alt="phong_light.png" height="400" src="render_img/phong_light.png" width="500"/>
+<img alt="normal_texture.png" height="400" src="render_img/normal_texture.png" width="500"/>
 
 ###### 11、阴影shadow_map支持
 
-<img alt="shadow_map4.jpg" height="200" src="render_img/shadow_map4.jpg" width="200"/>
-
-![shadow_map.png](render_img/shadow_map.png)
-
-
-###### 12、全局光照路径追踪简单实现
-
-![global_path_ray_trace.png](render_img/global_path_ray_trace.png)
+<img alt="shadow_map4.jpg" height="400" src="render_img/shadow_map4.jpg" width="500"/>
+<img alt="shadow_map.png" height="400" src="render_img/shadow_map.png" width="500"/>
 
 
-[//]: # (![muti_obj.png]&#40;render_img/muti_obj.png&#41;)
+###### 12、全局光照路径追踪实现
 
-[//]: # (###### 10、性能测试)
+<img alt="global_ray_caster.png" height="400" src="render_img/global_ray_caster.png" width="500"/>
+<img alt="global_ray_caster.png" height="400" src="render_img/global_ray_caster_metal.png" width="500"/>
 
-[//]: # (设备Macbook Pro2023 14寸笔记本电脑。渲染"resources/pig/16433_Pig.obj"文件，包含了120576个三角形。分辨率640*480.默认 release build)
 
-[//]: # (在不同的MSAA倍率下，光线投射和光栅化两种渲染模式的平均帧率如下)
-
-[//]: # ()
-[//]: # (1、JobSystem开启8线程)
-
-[//]: # ()
-[//]: # (| MSAA | 光线投射    | 光线投射（bvh加速） | 光栅化    |           )
-
-[//]: # (|------|---------|-------------|--------|)
-
-[//]: # (| 1    | 0.20fps | 27fps       | 120fps |)
-
-[//]: # (| 2    | 0.09fps | 18fps       | 70fps  |)
-
-[//]: # (| 4    | 0.05fps | 11fps       | 35fps  |)
-
-[//]: # ()
-[//]: # (2、JobSystem单线程)
-
-[//]: # ()
-[//]: # (| MSAA   | 光线投射（bvh加速） | 光栅化    |)
-
-[//]: # (|--------|-------------|--------|)
-
-[//]: # (| 1     | 10.3fps       | 40fps |)
-
-[//]: # (| 2     | 6.5fps       | 25fps  |)
-
-[//]: # (| 4     |3.5fps       | 10fps  |)
 
 

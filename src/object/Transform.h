@@ -44,17 +44,17 @@ public:
     void remove_component(int component_type);
     template <typename T>
     void remove_component();
-    Component* get_component(int component_type) const;
+    [[nodiscard]] Component* get_component(int component_type) const;
     template <class T, class ... ARGS>
     T* add_component(ARGS&&... args);
     template <typename T>
-    T* get_component();
+    T* get_component() const;
     template <typename T>
-    void get_components(int component_type, std::vector<T*>&);
+    void get_components(int component_type, std::vector<T*>&) const;
     template <class T>
-    void get_components_in_children(std::vector<T*>& result);
+    void get_components_in_children(std::vector<T*>& result) const;
     template <typename T>
-    T* get_component_in_parent();
+    T* get_component_in_parent() const;
 };
 
 template <typename T>
@@ -73,13 +73,13 @@ T* Transform::add_component(ARGS&&... args)
 }
 
 template <typename T>
-T* Transform::get_component()
+T* Transform::get_component() const
 {
     return (T*)get_component(T::get_type_id());
 }
 
 template <typename T>
-void Transform::get_components(int component_type, std::vector<T*>& result)
+void Transform::get_components(int component_type, std::vector<T*>& result) const
 {
     for (auto component : components)
     {
@@ -91,7 +91,7 @@ void Transform::get_components(int component_type, std::vector<T*>& result)
 }
 
 template <typename T>
-void Transform::get_components_in_children(std::vector<T*>& result)
+void Transform::get_components_in_children(std::vector<T*>& result) const
 {
     this->get_components(T::get_type_id(), result);
     for (auto child : this->children)
@@ -103,7 +103,7 @@ void Transform::get_components_in_children(std::vector<T*>& result)
 
 
 template <typename T>
-T* Transform::get_component_in_parent()
+T* Transform::get_component_in_parent() const
 {
     auto p = this;
     T* res = nullptr;

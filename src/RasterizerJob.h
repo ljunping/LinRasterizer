@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "DrawCallContext.h"
+#include "Geometry.h"
 
+struct Ray;
 class DrawCallContext;
 class Mesh;
 class BVHTree;
@@ -55,8 +57,9 @@ void ray_cast_frag_complete(std::size_t data_begin,std::size_t data_end, void* g
 inline std::atomic<int> global_count(0);
 
 void global_path_ray_cast_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
-Vec3 calculate_ray_shader(DrawCallContext* call, const Vec3& pos, const Vec3& dir);
+Vec3 calculate_ray_shader(DrawCallContext* call, std::vector<int>& lights, Ray& ray_in, int depth);
 
+Vec3 calculate_ray_shader_russian(DrawCallContext* call, Ray& ray_in, int depth);
 
 void clear_depth_execute(std::size_t data_begin,std::size_t data_end, void* global_data);
 
@@ -80,7 +83,9 @@ void mid_filter_execute(std::size_t data_begin,std::size_t data_end, void* globa
 
 void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* global_data);
 
-void run_process_primitive(std::size_t data_begin,std::size_t data_end, void* global_data);
+void run_process_tri_primitive(std::size_t data_begin,std::size_t data_end, void* global_data);
+
+
 
 
 

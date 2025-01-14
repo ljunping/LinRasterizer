@@ -7,41 +7,53 @@
 #include "BVHTree.h"
 #include "Camera.h"
 #include "debug.h"
+#include "Mesh.h"
 
 
-
-
-
-
-
+TrianglePrimitive::TrianglePrimitive(): Geometry(TRI)
+{
+}
 
 
 bool TrianglePrimitive::ccw() const
 {
-    return inv_cross_dir_z > 0;
+    return cache_inv_cross_dir_z > 0;
 }
 
 L_MATH::Vec<float, 3> TrianglePrimitive::normal() const
 {
-    return normal_dir;
+    Vec3 cross_dir = L_MATH::cross(v[1] - v[0], v[2] - v[1]);
+    cross_dir.normalized();
+    return cross_dir;
 }
 
 float TrianglePrimitive::area() const
 {
-    return cache_area;
+    Vec3 cross_dir = L_MATH::cross(v[1] - v[0], v[2] - v[1]);
+    return cross_dir.sqrt_magnitude() / 2;
 }
 
-bool TrianglePrimitive::inside(const L_MATH::Vec<float, 3>& point) const
+bool TrianglePrimitive::inside_2D(const L_MATH::Vec<float, 3>& point) const
 {
     if (!box.inside<2>(point))
     {
         return false;
     }
     Vec3 vec;
-    barycentric(point, vec);
+    barycentric2D(point, vec);
     return is_same_sign(vec);
 }
 
+bool TrianglePrimitive::inside(const L_MATH::Vec<float, 3>& point)
+{
+    if (!box.inside<3>(point))
+    {
+        return false;
+    }
+    Vec3 vec;
+    barycentric3D(point, vec);
+    return is_same_sign(vec);
+}
 
 
 bool TrianglePrimitive::is_same_sign(const L_MATH::Vec<float, 3>& alpha) const
@@ -51,18 +63,16 @@ bool TrianglePrimitive::is_same_sign(const L_MATH::Vec<float, 3>& alpha) const
 
 float TrianglePrimitive::intersect_plane(const L_MATH::Vec<float, 3>& point,const Vec3& dir) const
 {
-    float t =  ::intersect_plane(point, dir, normal_dir, d);;
+    float t =  ::intersect_plane(point, dir, cache_normal_dir, d);;
     return t;
 }
 //三角形基元已经投影变换
-bool TrianglePrimitive::intersect_3D(const L_MATH::Vec<float, 3>& point, const L_MATH::Vec<float, 3>& dir,
-    RayCasterResult* result)
+bool TrianglePrimitive::intersect(const L_MATH::Vec<float, 3>& point, const L_MATH::Vec<float, 3>& dir,
+                                  RayCasterResult* result)
 {
-    // barycentric(point, result->alpha);
-    // result->triangle = this;
-    // return is_same_sign(result->alpha);
     result->t = intersect_plane(point, dir);
     barycentric3D(point + dir * result->t, result->alpha);
+    result->geometry = this;
     result->triangle = this;
     return is_same_sign(result->alpha);
 }
@@ -70,28 +80,81 @@ bool TrianglePrimitive::intersect_3D(const L_MATH::Vec<float, 3>& point, const L
 
 bool TrianglePrimitive::intersect_2D(const L_MATH::Vec<float, 3>& point, RayCasterResult* result)
 {
-    barycentric(point, result->alpha);
+    barycentric2D(point, result->alpha);
+    result->geometry = this;
     result->triangle = this;
     return is_same_sign(result->alpha);
 }
 
+L_MATH::Vec<float, 3> TrianglePrimitive::get_normal(const L_MATH::Vec<float, 3>& point)
+{
+    return normal();
+}
 
-void TrianglePrimitive::barycentric(const L_MATH::Vec<float, 3>& p,Vec3& alpha) const
+L_MATH::Vec<float, 2> TrianglePrimitive::get_uv(const L_MATH::Vec<float, 3>& point)
+{
+    Vec3 alpha;
+    barycentric3D(point, alpha);
+    Vec2 uv0, uv1, uv2;
+    this->mesh->get_attribute_value(this->vert_index[0], UV, uv0);
+    this->mesh->get_attribute_value(this->vert_index[1], UV, uv1);
+    this->mesh->get_attribute_value(this->vert_index[2], UV, uv2);
+    return uv0 * alpha[0] + uv1 * alpha[1] + uv2 * alpha[2];
+}
+
+
+L_MATH::Vec<float, 3> TrianglePrimitive::random(const L_MATH::Vec<float, 3>& origin)
+{
+    float u = L_MATH::random(), v = L_MATH::random();
+    if ((u + v) > 1)
+    {
+        u = 1 - u;
+        v = 1 - v;
+    }
+    return this->v[0] * u + this->v[1] * v + this->v[2] * (1 - u - v) - origin;
+}
+
+
+void TrianglePrimitive::clone(Geometry* src) const
+{
+    (*dynamic_cast<TrianglePrimitive*>(src)) = (*this);
+}
+
+
+void TrianglePrimitive::transform(const L_MATH::Mat<float, 4, 4>& mat)
+{
+    update(mat);
+}
+
+float TrianglePrimitive::pdf(const L_MATH::Vec<float, 3>& origin, const L_MATH::Vec<float, 3>& dir)
+{
+    RayCasterResult result;
+    if (!intersect(origin, dir, &result))
+    {
+        return 0;
+    }
+    auto dir_len = dir.sqrt_magnitude();
+    auto distance2 = result.t * result.t * dir_len * dir_len;
+    float cose = fabs(dot(dir, cache_normal_dir) / dir_len);
+    return fabs(distance2 / (cose * cache_area));
+}
+
+void TrianglePrimitive::barycentric2D(const L_MATH::Vec<float, 3>& p,Vec3& alpha) const
 {
     float c;
     L_MATH::cross_opt_3(v[1] - p, v[2] - v[1], c);
-    alpha.data[0] = c * inv_cross_dir_z;
+    alpha.data[0] = c * cache_inv_cross_dir_z;
     L_MATH::cross_opt_3(v[2] - p, v[0] - v[2], c);
-    alpha.data[1] = c * inv_cross_dir_z;
+    alpha.data[1] = c * cache_inv_cross_dir_z;
     alpha.data[2] = 1 - alpha.data[0] - alpha.data[1];
 }
 
 void TrianglePrimitive::barycentric3D(const L_MATH::Vec<float, 3>& p, L_MATH::Vec<float, 3>& alpha) const
 {
     auto _v0 = L_MATH::cross(v[1] - p, v[2] - v[1]);
-    alpha.data[0] = dot(_v0, inv_cross_dir);
+    alpha.data[0] = dot(_v0, cache_inv_cross_dir);
     auto _v1 = L_MATH::cross(v[2] - p, v[0] - v[2]);
-    alpha.data[1] = dot(_v1, inv_cross_dir);
+    alpha.data[1] = dot(_v1, cache_inv_cross_dir);
     alpha.data[2] = 1 - alpha.data[0] - alpha.data[1];
 }
 
@@ -103,7 +166,7 @@ void TrianglePrimitive::update(const L_MATH::Mat<float, 4, 4>& mat)
         Vec4& _v4 = static_cast<L_MATH::Vec<float, 4>&>(v[i]);
         _v4[3] = 1;
         _v4 = _v4.mul_transpose(mat);
-        inv_w[i] = 1 / _v4[3];
+        cache_inv_w[i] = 1 / _v4[3];
         _v4 /= _v4[3];
     }
     update_param();
@@ -118,22 +181,22 @@ void TrianglePrimitive::update_param()
     box.expand(v[2]);
     Vec3 cross_dir = L_MATH::cross(v[1] - v[0], v[2] - v[1]);
     cache_area = cross_dir.sqrt_magnitude() / 2;
-    normal_dir = cross_dir.normalize();
-    d = normal_dir.dot(v[0]);
-    inv_w[0] = 1 / v[0][3];
-    inv_w[1] = 1 / v[1][3];
-    inv_w[2] = 1 / v[2][3];
-    inv_cross_dir_z = 1 / (cross_dir[2]);
-    inv_cross_dir = normal_dir * (1 / cross_dir.sqrt_magnitude());
+    cache_normal_dir = cross_dir.normalize();
+    d = cache_normal_dir.dot(v[0]);
+    cache_inv_w[0] = 1 / v[0][3];
+    cache_inv_w[1] = 1 / v[1][3];
+    cache_inv_w[2] = 1 / v[2][3];
+    cache_inv_cross_dir_z = 1 / (cross_dir[2]);
+    cache_inv_cross_dir = cache_normal_dir * (1 / cross_dir.sqrt_magnitude());
     clipped = false;
-    if (L_MATH::is_zero(cross_dir[2]) || L_MATH::is_zero(normal_dir[2])||!ccw())
+    if (L_MATH::is_zero(cross_dir[2]) || L_MATH::is_zero(cache_normal_dir[2])||!ccw())
     {
         discard = true;
     }
 }
 
 
-void TrianglePrimitive::clip()
+void TrianglePrimitive::clip_2D()
 {
     if (clipped)
     {
@@ -190,7 +253,4 @@ void TrianglePrimitive::clip()
     clip_vert_count = clip_alphas.size();
 }
 
-void TrianglePrimitive::reset()
-{
 
-}

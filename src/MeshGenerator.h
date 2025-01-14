@@ -17,11 +17,11 @@ struct DrawLineInfo
 
 void draw_line(Context* ctx, Color* buff, void* data);
 
-Mesh* generate_sphere(float radius, int stacks, int slices);
+std::shared_ptr<Mesh> generate_sphere(float radius, int stacks, int slices);
 
-Mesh* generate_quad();
+std::shared_ptr<Mesh> generate_quad();
 
-Mesh* generate_tri();
+std::shared_ptr<Mesh> generate_tri();
 
 
 #endif //MESHGENERATOR_H

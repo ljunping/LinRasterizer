@@ -5,12 +5,21 @@
 #ifndef DRAWCALLDATA_H
 #define DRAWCALLDATA_H
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "Color.h"
 #include "CommonMacro.h"
 #include "DrawCallSetting.h"
+#include "FragShader.h"
+#include "Geometry.h"
 #include "L_math.h"
+#include "Material.h"
+#include "Mesh.h"
+#include "Texture.h"
+#include "VertShader.h"
 
+class Transform;
+struct Geometry;
 struct Fragment;
 class Light;
 struct VertexInterpolation;
@@ -38,17 +47,25 @@ enum VertOutPutType
 
 struct RenderNode
 {
+    bool emit = false;
+    bool shadow_caster = false;
     bool transparent{};
     int render_order{};
-    int mesh{};
+    SHARE_PTR<Mesh> mesh{};
+    const Transform* transform{};
+    SHARE_PTR<Geometry> local_geometry;
+    Geometry* transform_geometry;
     Mat44 model_matrix;
     Camera* camera{};
     int frame_buff_index{};
-    int textures[MAX_TEXTURES_COUNT];
-    int materials[MAX_MATERIAL_COUNT];
-    int frag_shader{};
-    int vert_shader{};
+    SHARE_PTR<Texture> textures[MAX_TEXTURES_COUNT];
+    SHARE_PTR<Material> materials[MAX_MATERIAL_COUNT];
+    SHARE_PTR<FragShader> frag_shader{};
+    SHARE_PTR<VertShader> vert_shader{};
+
 };
+
+
 
 bool less_compare_render_node(const RenderNode& a, const RenderNode& b);
 
@@ -65,11 +82,19 @@ class DrawCallContext
 {
 private:
     friend class GPU;
-
 public:
-    //global_ray_path_trace
-    std::vector<RenderNode> global_ray_trace_render_nodes;
-    //
+    Object* host;
+    std::vector<RenderNode> nodes;
+    std::vector<int> emit_render_node;
+    std::unordered_map<Mesh*, int> mesh_2_node;
+    std::vector<SHARE_PTR<Mesh>> meshes;
+    std::unordered_map<Mesh*, int> mesh_2_index;
+    std::vector<int> mesh_vert_count = std::vector(1, 0);
+    std::vector<int> mesh_tri_count = std::vector(1, 0);
+    std::vector<RenderNode*> geometry_2_node;
+    std::vector<Geometry*> geometries;
+    Geometry* geometrie_pools[GeometryCount]{};
+    int geometry_count[GeometryCount]{};
     int w{}, h{};
     Fragment* fragment_map{};
     Camera* camera{};
@@ -78,36 +103,31 @@ public:
     Context* ctx{};
     DrawCallContextSetting setting;
     VertexOutput* outputs{};
-    RenderNode render_node{};
     bool is_set_render_node = false;
-    std::vector<std::pair<Mesh*,Mat44>> meshes;
     Mat44 proj_matrix;
     Mat44 view_matrix;
     Vec3 view_world_pos;
-    std::vector<TrianglePrimitive*> primitives;
-    Material* materials[MAX_MATERIAL_COUNT]{};
-    Texture* textures[MAX_TEXTURES_COUNT]{};
-    FragShader* frag_shader{};
-    VertShader* vert_shader{};
+    SHARE_PTR<Material> materials[MAX_MATERIAL_COUNT]{};
+    SHARE_PTR<Texture> textures[MAX_TEXTURES_COUNT]{};
+    SHARE_PTR<FragShader> frag_shader{};
+    SHARE_PTR<VertShader> vert_shader{};
     BVHTree* bvh_tree{};
-    TrianglePrimitive* tri_pool{};
     int gl_position_count = 0;
     Vec4* gl_positions{};
-    bool try_add_render_node(RenderNode& node);
-    void set_render_node(const RenderNode& node);
     ~DrawCallContext();
-    void assign_triangle_primitives(int size);
-    L_MATH::Mat<float, 4, 4> get_model_matrix(Mesh* mesh) const;
-    RenderNode& get_render_node(Mesh* mesh);
-    Mesh* get_mesh(int vert_index, int& mesh_index) const;
-    int get_muti_mesh_vert_index(const Mesh* mesh, int mesh_index) const;
-    void generate_triangle_primitive(TrianglePrimitive& tri);
+    void set_mesh_render_params(const RenderNode& node);
+    void add_render_node(RenderNode& node);
+    void assign_geometry_primitives(GeometryType type, int count);
+    RenderNode* get_render_node(Mesh* mesh);
+    std::shared_ptr<Mesh> get_mesh(int vert_index, int& mesh_index) const;
+    std::shared_ptr<Mesh> get_mesh_by_tri_index(int tri_index, int& mesh_tri_index) const;
+    int get_mesh_vert_index(Mesh* mesh, int mesh_index) ;
+    void get_tri_mesh_index (int index, TrianglePrimitive& tri);;
     template <int N>
     void get_vert_attribute_value(Mesh*, int vert_index, int attribute_index, L_MATH::Vec<float, N>& result);
     void create_vert_attribute(Mesh* mesh, int v0, int v1, int v2,
                                const L_MATH::Vec<float, 3>& alpha, VertexInterpolation& result);
-}
-;
+};
 
 
 

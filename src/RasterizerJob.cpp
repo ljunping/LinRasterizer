@@ -2,6 +2,10 @@
 // Created by Lin on 2024/11/20.
 //
 #include "RasterizerJob.h"
+
+#include <random>
+#include <__random/random_device.h>
+
 #include "BresenhamLine.h"
 #include "BVHTree.h"
 #include "Camera.h"
@@ -52,10 +56,6 @@ void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end,  void* g
         int i = idx / w, j = idx % w;
         float y,x;
         invert_view_transform(draw_call, msaa_index, w, h, j, i, x, y);
-        if(    idx==0)
-        {
-            DEBUG_VAR
-        }
         if (draw_call->setting.build_bvh)
         {
             if (!ray_caster_bvh(draw_call,draw_call->bvh_tree, x, y, &result))
@@ -69,57 +69,14 @@ void ray_cast_frag_execute(std::size_t data_begin,std::size_t data_end,  void* g
                 continue;
             }
         }
-
         add_fragment(*result.triangle, draw_call, msaa_index, result.alpha, i, j);
     }
-
 }
 
 void ray_cast_frag_complete(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     auto draw_call_context_tuple = (std::tuple<DrawCallContext*, int>*)global_data;
     delete draw_call_context_tuple;
-}
-
-void global_path_ray_cast_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
-{
-    DrawCallContext* ctx = (DrawCallContext*)global_data;
-    int w = ctx->w, h = ctx->h;
-    auto global_path_trace_samples = ctx->setting.global_path_trace_samples;
-    auto near = ctx->camera->view_frustum.near;
-    float half_height = tan(L_MATH::deg2rad(ctx->camera->view_frustum.fov / 2)) * near;
-    float half_width = half_height * ctx->camera->view_frustum.aspect_ratio;
-    auto camera_mat = ctx->camera->scene_node->get_local_to_global_mat();
-    auto camera_pos = static_cast<Vec3>(camera_mat[3]);
-    auto frame_buff = ctx->frame_buff;
-    for (int idx = data_begin; idx < data_end; idx++)
-    {
-        int j = idx / w, i = idx % w;
-        float delta = 1.f / (global_path_trace_samples + 1);
-        Vec3 radiance, radiance2, st_radiance(100);
-        int count = 0;
-        for (int _k = 0; _k < global_path_trace_samples; ++_k)
-        {
-            for (int _m = 0; _m < global_path_trace_samples; ++_m)
-            {
-                Vec3 ray_pos(2 * half_width * (i + delta * _k - 0.5f) / (w - 1) - half_width,
-                             2 * half_height * (j + delta * _m - 0.5f) / (h - 1) - half_height, -near);
-                L_MATH::pos3_l_dot_mat44(ray_pos, camera_mat);
-                Vec3 dir = (ray_pos - camera_pos).normalize();
-                auto ray_shader = calculate_ray_shader(ctx, ray_pos, dir);
-                radiance += ray_shader;
-                ++count;
-            }
-        }
-        ++global_count;
-        if (global_count * 100 % (w * h) == 0)
-        {
-            printf("global_path_ray_cast_execute percent %.2f\n", global_count * 1.0 / (w * h));
-        }
-        radiance /= count;
-        L_MATH::clamp(radiance,Vec3::ZERO,Vec3::ONE);
-        frame_buff[(h - j - 1) * w + i] = l_color(radiance);
-    }
 }
 
 void mid_filter_execute(std::size_t data_begin,std::size_t data_end, void* global_data)
@@ -146,82 +103,118 @@ void mid_filter_execute(std::size_t data_begin,std::size_t data_end, void* globa
                 color += v_color(frame_buff[(y + j) * w + x + i]);
             }
         }
-        // std::sort(colors.begin(), colors.end());
         frame_buff[idx] = l_color(color / size);
     }
 }
 
-L_MATH::Vec<float, 3> calculate_ray_shader(DrawCallContext* ctx, const L_MATH::Vec<float, 3>& pos,
-    const L_MATH::Vec<float, 3>& dir)
+void global_path_ray_cast_execute(std::size_t data_begin, std::size_t data_end, void* global_data)
 {
-    L_MATH::Vec<float, 3> result;
-    for (auto object : ctx->ctx->light_manager->get_objects())
+    DrawCallContext* ctx = (DrawCallContext*)global_data;
+    int w = ctx->w, h = ctx->h;
+    auto global_path_trace_samples = ctx->setting.global_path_trace_samples;
+    auto near = ctx->camera->view_frustum.near;
+    float half_height = tan(L_MATH::deg2rad(ctx->camera->view_frustum.fov / 2)) * near;
+    float half_width = half_height * ctx->camera->view_frustum.aspect_ratio;
+    auto camera_mat = ctx->camera->scene_node->get_local_to_global_mat();
+    auto camera_pos = static_cast<Vec3>(camera_mat[3]);
+    auto frame_buff = ctx->frame_buff;
+    auto& lights = ctx->emit_render_node;
+    for (int idx = data_begin; idx < data_end; idx++)
     {
-        if (object->intersect(pos, dir))
+        int j = idx / w, i = idx % w;
+        float delta = 1.f / (global_path_trace_samples + 1);
+        Vec3 radiance;
+        int count = 0;
+        for (int _k = 0; _k < global_path_trace_samples; ++_k)
         {
-            auto shadow = object->calculate_shadow(ctx->camera, pos);
-            if (L_MATH::is_zero(shadow))
+            for (int _m = 0; _m < global_path_trace_samples; ++_m)
             {
-                result += object->calculate_radiance(pos);
+                Vec3 ray_pos(2 * half_width * (i + delta * _k - 0.5f) / (w - 1) - half_width,
+                             2 * half_height * (j + delta * _m - 0.5f) / (h - 1) - half_height, -near);
+                L_MATH::pos3_l_dot_mat44(ray_pos, camera_mat);
+                Vec3 dir = (ray_pos - camera_pos).normalize();
+                Ray ray{ray_pos, dir};
+                auto ray_shader = calculate_ray_shader(ctx, lights, ray, ctx->setting.global_ray_trace_max_depth);
+
+                if(                ray_shader.sqrt_magnitude()>0)
+                {
+                    DEBUG_VAR
+                }
+                radiance += ray_shader;
+                ++count;
             }
         }
+        ++global_count;
+        if (global_count * 100 % (w * h) == 0)
+        {
+            printf("global_path_ray_cast_execute percent %.2f\n", global_count * 1.0 / (w * h));
+        }
+        radiance /= count;
+        if (radiance[0] < 0.3)
+        {
+            DEBUG_VAR
+        }
+        L_MATH::clamp(radiance,Vec3::ZERO,Vec3::ONE);
+        frame_buff[(h - j - 1) * w + i] = l_color(radiance);
     }
-    auto global_ray_trace_rand_range = ctx->setting.global_ray_trace_rand_range;
-    auto global_ray_trace_thr = ctx->setting.global_ray_trace_thr;
-    int rv = rand() % ctx->setting.global_ray_trace_rand_range;
-    if (rv < global_ray_trace_thr)
+}
+
+
+
+
+L_MATH::Vec<float, 3> calculate_ray_shader(DrawCallContext* ctx, std::vector<int>& lights, Ray& ray_in,
+                                           int depth)
+{
+    if (depth == 0)
     {
-        std::vector<RayCasterResult> ray_caster_results;
-        auto condition = [](TrianglePrimitive* tri, void* data)
-        {
-            auto dir = static_cast<Vec3*>(data);
-            return dot(tri->normal_dir, *dir) < 0;
-        };
-        ctx->bvh_tree->intersect_traverse(pos, dir, ray_caster_results, condition, (void*)&dir);
-        if (ray_caster_results.empty())
-        {
-            return result;
-        }
-        RayCasterResult& min_RayCasterResult = ray_caster_results[0];
-        for (auto& ray_caster_result : ray_caster_results)
-        {
-            if (ray_caster_result.t < min_RayCasterResult.t)
-            {
-                min_RayCasterResult = ray_caster_result;
-            }
-        }
-
-        auto triangle_primitive = min_RayCasterResult.triangle;
-        auto v0 = ctx->get_muti_mesh_vert_index(triangle_primitive->mesh,
-                                                triangle_primitive->vert_index[0]);
-        auto v1 = ctx->get_muti_mesh_vert_index(triangle_primitive->mesh,
-                                                triangle_primitive->vert_index[1]);
-        auto v2 = ctx->get_muti_mesh_vert_index(triangle_primitive->mesh,
-                                                triangle_primitive->vert_index[2]);
-        auto normal0 = static_cast<L_MATH::Vec<float, 3>&>(ctx->outputs[v0].fix_outputs[
-            WORLD_NORMAL]);
-        auto normal1 = static_cast<L_MATH::Vec<float, 3>&>(ctx->outputs[v1].fix_outputs[
-            WORLD_NORMAL]);
-        auto normal2 = static_cast<L_MATH::Vec<float, 3>&>(ctx->outputs[v2].fix_outputs[
-            WORLD_NORMAL]);
-
-        auto normal = (normal0 * min_RayCasterResult.alpha[0] + normal1 * min_RayCasterResult.alpha[1] +
-            normal2 * min_RayCasterResult.alpha[2]);
-        normal.normalized();
-        Material* material = Resource::get_resource<Material>(
-            min_RayCasterResult.triangle->render_node->materials[0]);
-        Vec3 hit_pos = pos + dir * min_RayCasterResult.t;
-        double seta = static_cast<double>(rand()) / RAND_MAX * 360;
-        double beta = static_cast<double>(rand()) / RAND_MAX * 180;
-        Vec3 rand_dir(cos(beta) * cos(seta), cos(beta) * sin(seta), sin(beta));
-        auto mat = L_MATH::rotate(L_MATH::FORWARD, normal);
-        L_MATH::pos3_l_dot_mat33(rand_dir, mat);
-        auto f = material->f(normal, rand_dir, dir * -1);
-        auto ray_shader = calculate_ray_shader(ctx, hit_pos , rand_dir);
-        auto vec = f * ray_shader * std::max(dot(normal, rand_dir), 0.0f) * 2 * PI;
-        result += vec * (1.0f * global_ray_trace_rand_range / global_ray_trace_thr);
+        return Vec3::ZERO;
     }
-    return result;
+    RayCasterResult min_RayCasterResult;
+    if (!ctx->bvh_tree->intersect_nearest(ray_in.origin, ray_in.direction, min_RayCasterResult, nullptr, nullptr))
+    {
+        return Vec3::ZERO;
+    }
+    std::vector<SHARE_PTR<Pdf>> pdfs;
+    Vec3 hit_pos = ray_in.get_point(min_RayCasterResult.t);
+    for (auto& light_index : lights)
+    {
+        auto& light = ctx->nodes[light_index];
+        auto light_comp = light.transform->get_component<Light>();
+        if (light_comp != nullptr && L_MATH::is_zero(light_comp->calculate_shadow(ctx->camera, hit_pos)))
+        {
+            pdfs.emplace_back(std::make_shared<HittablePdf>(*light.transform_geometry, hit_pos));
+        }
+    }
+    if(    min_RayCasterResult.geometry->id==28)
+    {
+        DEBUG_VAR
+    }
+    auto& geometry_render_node = *ctx->geometry_2_node[min_RayCasterResult.geometry->id];
+    auto& material = geometry_render_node.materials[0];
+    auto& texture = geometry_render_node.textures[0];
+
+    auto hit_uv = min_RayCasterResult.geometry->get_uv(hit_pos);
+    Vec3 texture_color;
+    texture->sample(hit_uv, 0, (static_cast<Vec4&>(texture_color)));
+    Vec3 emit_color = texture_color * material->emit(ray_in, min_RayCasterResult);
+    ScatterResult scatter_result{};
+    if (!material->scatter(ray_in, min_RayCasterResult, scatter_result))
+    {
+        return emit_color;
+    }
+    if (scatter_result.skip_pdf)
+    {
+        return texture_color * calculate_ray_shader(ctx, lights, scatter_result.skip_pdf_ray, depth - 1);
+    }
+    pdfs.emplace_back(scatter_result.pdf);
+    auto mix_pdf = std::make_shared<MixPdf>(pdfs);
+    auto dir = mix_pdf->generate();
+    auto sample_pdf = mix_pdf->value(dir);
+    Ray scattered_ray{hit_pos, dir};
+    auto scatter_pdf = material->scatter_pdf(scattered_ray, min_RayCasterResult, scatter_result);
+    auto color_from_scatter = texture_color * scatter_pdf * calculate_ray_shader(ctx, lights, scattered_ray, depth - 1) / sample_pdf;
+    return emit_color + color_from_scatter;
+
 }
 
 
@@ -385,11 +378,11 @@ void rast_tri_execute(std::size_t data_begin,std::size_t data_end, void* global_
     auto& draw_call_context_tuple = *(std::tuple<DrawCallContext*, int>*)global_data;
     auto draw_call_context = std::get<0>(draw_call_context_tuple);
     auto msaa_index = std::get<1>(draw_call_context_tuple);
-    auto& triangle_primitives = draw_call_context->primitives;
+    auto tri_pool = dynamic_cast<TrianglePrimitive*>(draw_call_context->geometrie_pools[TRI]);
     for (int i = data_begin; i < data_end; ++i)
     {
-        auto& triangle_primitive = *triangle_primitives[i];
-        if (triangle_primitive.discard || triangle_primitive.inv_cross_dir_z < 0)
+        auto& triangle_primitive = *(tri_pool + i);
+        if (triangle_primitive.discard || triangle_primitive.cache_inv_cross_dir_z < 0)
         {
             continue;
         }
@@ -409,32 +402,26 @@ void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* glob
 {
 }
 
-void run_process_primitive(std::size_t data_begin,std::size_t data_end, void* global_data)
+void run_process_tri_primitive(std::size_t data_begin,std::size_t data_end, void* global_data)
 {
     DrawCallContext* draw_call = (DrawCallContext*)global_data;
-    auto get_model_tri = [&draw_call](int index, TrianglePrimitive& tri)
-    {
-        for (int i = 0; i < draw_call->meshes.size(); ++i)
-        {
-            Mesh& mesh = *draw_call->meshes[i].first;
-            if (index < mesh.tri_count())
-            {
-                mesh.generate_triangle_index(tri, index);
-                break;
-            }
-            index -= mesh.tri_count();
-        }
-    };
-
+    auto geometrie_pool = reinterpret_cast<TrianglePrimitive*>(draw_call->geometrie_pools[TRI]);
     for (int i = data_begin; i < data_end; ++i)
     {
-        draw_call->primitives[i] = draw_call->tri_pool + i;
-        auto& triangle_primitive = *draw_call->primitives[i];
-        get_model_tri(i, triangle_primitive);
-        draw_call->generate_triangle_primitive(triangle_primitive);
+        auto tri = new(geometrie_pool + i) TrianglePrimitive();
+        draw_call->geometries[i] = tri;
+        draw_call->get_tri_mesh_index(i, *tri);
+        tri->id = i;
+        for (int j = 0; j < 3; ++j)
+        {
+            auto vert_index = draw_call->get_mesh_vert_index(tri->mesh, tri->vert_index[j]);
+            Vec4& v = static_cast<L_MATH::Vec<float, 4>&>(tri->v[j]);
+            v = draw_call->gl_positions[vert_index];
+        }
+        draw_call->geometry_2_node[i] = draw_call->get_render_node(tri->mesh);
+        tri->update_param();
     }
 }
-
 
 
 
@@ -525,11 +512,11 @@ bool add_fragment(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_in
             draw_call->depth_buff[index] = st_z;
         }
     }
-    auto alpha_inv_w = 1 / L_MATH::dot(alpha, tri.inv_w);
+    auto alpha_inv_w = 1 / L_MATH::dot(alpha, tri.cache_inv_w);
     auto real_z = -1 * alpha_inv_w;
     fragment.triangle = &tri;
     fragment.frag_coord = Vec3{(float)j, (float)i, real_z,};
-    fragment.alpha =  alpha * tri.inv_w * alpha_inv_w;
+    fragment.alpha =  alpha * tri.cache_inv_w * alpha_inv_w;
     fragment.resolution[0] = w;
     fragment.draw_call = draw_call;
     fragment.resolution[1] = h;
@@ -541,16 +528,16 @@ bool ray_caster(DrawCallContext* draw_call, float si, float sj, RayCasterResult*
     Vec3 sv = Vec3({si, sj, -1});
     float min_z = 1;
     bool _is_ray_caster = false;
-    auto& proj_triangle_list = draw_call->primitives;
+    auto proj_triangle_list = dynamic_cast<TrianglePrimitive*>(draw_call->geometrie_pools[TRI]);
     L_MATH::Vec<float, 3> alpha;
-    for (int i = 0; i < proj_triangle_list.size(); ++i)
+    for (int i = 0; i < draw_call->geometry_count[TRI]; ++i)
     {
-        auto& triangle = *proj_triangle_list[i];
+        auto& triangle = *(proj_triangle_list + i);
         if (triangle.discard)
         {
             continue;
         }
-        if (triangle.inv_cross_dir_z< 0)
+        if (triangle.cache_inv_cross_dir_z < 0)
         {
             continue;
         }
@@ -558,7 +545,7 @@ bool ray_caster(DrawCallContext* draw_call, float si, float sj, RayCasterResult*
         {
             continue;
         }
-        triangle.barycentric(sv, alpha);
+        triangle.barycentric2D(sv, alpha);
         if (triangle.is_same_sign(alpha))
         {
             float stz = (triangle.v[0][2] * alpha[0]
@@ -584,15 +571,15 @@ bool ray_caster_bvh(DrawCallContext* ctx,BVHTree* bvh_tree,float si, float sj, R
     float min_z = 1;
     bool _is_ray_caster = false;
     std::vector<RayCasterResult> ray_casters;
-    auto condition=[](TrianglePrimitive* tri,void *data)
-    {
-        return !tri->discard && tri->ccw();
-    };
-    if (bvh_tree->intersect_traverse(sv, L_MATH::FORWARD, ray_casters, condition, nullptr))
+    if (bvh_tree->intersect_traverse(sv, L_MATH::FORWARD, ray_casters, nullptr, nullptr))
     {
         for (auto& ray_caster : ray_casters)
         {
-            auto& triangle = *ray_caster.triangle;
+            if (!ray_caster.triangle)
+            {
+                continue;
+            }
+            auto& triangle = *static_cast<TrianglePrimitive*>(ray_caster.triangle);
             if (triangle.discard || !triangle.ccw())
             {
                 continue;
@@ -605,6 +592,7 @@ bool ray_caster_bvh(DrawCallContext* ctx,BVHTree* bvh_tree,float si, float sj, R
 
             if (stz < min_z && stz > -1)
             {
+                result->geometry = &triangle;
                 result->triangle = &triangle;
                 result->alpha = alpha;
                 min_z = stz;
@@ -655,7 +643,7 @@ void rast_huge_tri(TrianglePrimitive& tri, Context* ctx)
 void rast_tri(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_index)
 {
     int w = draw_call->w, h = draw_call->h;
-    tri.clip();
+    tri.clip_2D();
     auto vert_count = tri.clip_vert_count;
     auto clip_vertices = tri.clip_vertices;
     auto alpha_array = tri.clip_vertices_alpha;
@@ -724,7 +712,7 @@ void rast_tri(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_index)
         {
             l_bresenham_line.next_point(lx, ly, lmx, lmy);
             invert_view_transform(draw_call,msaa_index,w, h, lx, ly, st_l[0], st_l[1]);
-            tri.barycentric(st_l, l_alpha);
+            tri.barycentric2D(st_l, l_alpha);
             add_fragment(tri, draw_call,msaa_index, l_alpha, ly, lx);
 
         }
@@ -733,7 +721,7 @@ void rast_tri(TrianglePrimitive& tri, DrawCallContext* draw_call,int msaa_index)
         {
             r_bresenham_line.next_point(rx, ry, rmx, rmy);
             invert_view_transform(draw_call,msaa_index, w, h, rx, ry, st_r[0], st_r[1]);
-            tri.barycentric(st_r, r_alpha);
+            tri.barycentric2D(st_r, r_alpha);
             add_fragment(tri, draw_call, msaa_index,r_alpha, ry, rx);
         }
         next_right = false;

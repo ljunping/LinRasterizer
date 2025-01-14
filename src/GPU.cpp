@@ -75,7 +75,7 @@ GPUCmds::GPUCmds(DrawCallContext& draw_call_context, int cmd_count,...)
 void GPU::build_bvh_tree(DrawCallContext* dc)
 {
     dc->bvh_tree = new BVHTree();
-    dc->bvh_tree->build(dc->primitives);
+    dc->bvh_tree->build(dc->geometries);
 }
 
 int GPU::run_frag_shader(DrawCallContext* dc)
@@ -159,21 +159,58 @@ void GPU::end()
 void GPU::process_primitives(DrawCallContext* dc)
 {
     std::vector<std::tuple<DrawCallContext*,Mat44>> data(dc->meshes.size());
-
-    int pri_size = 0;
+    int mesh_tri_count = 0;
     for (int i = 0; i < dc->meshes.size(); ++i)
     {
-        auto& mesh = dc->meshes[i].first;
-        pri_size += mesh->tri_count();
+        auto& mesh = dc->meshes[i];
+        mesh_tri_count += mesh->tri_count();
     }
-    dc->assign_triangle_primitives(pri_size);
+    int geometry_index = mesh_tri_count;
+    std::vector<int> render_nodes[GeometryCount];
+    int geometry_count[GeometryCount]{};
+    int _geometry_sum = mesh_tri_count;
+    for (int i = 0; i < dc->nodes.size(); ++i)
+    {
+        auto& node = dc->nodes[i];
+        if (node.local_geometry)
+        {
+            render_nodes[node.local_geometry->geometry_type].emplace_back(i);
+            geometry_count[node.local_geometry->geometry_type]++;
+            _geometry_sum++;
+        }
+    }
+    dc->geometry_2_node.resize(_geometry_sum);
+    dc->geometries.resize(_geometry_sum);
+    for (int i = 0; i < GeometryCount; ++i)
+    {
+        int offset = i == TRI ? mesh_tri_count : 0;
+        auto _GeometryType = static_cast<GeometryType>(i);
+        dc->assign_geometry_primitives(static_cast<GeometryType>(i), geometry_count[i] + offset);
+        for (int j = offset; j < geometry_count[i] + offset; ++j)
+        {
+            auto render_node_indx = render_nodes[i][j - offset];
+            auto& render_node = dc->nodes[render_node_indx];
+            auto _Geometry = reinterpret_cast<Geometry*>(
+                reinterpret_cast<char*>(dc->geometrie_pools[i]) +
+                j * geometry_size(_GeometryType));
+            build_geometry(_GeometryType, _Geometry);
+            render_node.local_geometry->clone(_Geometry);
+            _Geometry->id = geometry_index;
+            dc->geometry_2_node[_Geometry->id] = &render_node;
+            dc->geometries[geometry_index] = _Geometry;
+            _Geometry->transform(render_node.model_matrix);
+            render_node.transform_geometry = _Geometry;
+            geometry_index++;
+        }
+    }
+
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(job_group,
                           0,
                           0,
-                          pri_size,
+                          mesh_tri_count,
                           dc,
-                          run_process_primitive,
+                          run_process_tri_primitive,
                           default_complete);
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);
@@ -190,7 +227,7 @@ void GPU::run_vert_shader(DrawCallContext* dc)
     int vert_count = 0;
     for (int i = 0; i < dc->meshes.size(); ++i)
     {
-        auto mesh = dc->meshes[i].first;
+        auto mesh = dc->meshes[i];
         vert_count += mesh->vert_count;
     }
     if (vert_count != dc->gl_position_count)
@@ -228,14 +265,14 @@ int GPU::ray_cast_scene(DrawCallContext* dc,int msaa_index)
 int GPU::raster_scene(DrawCallContext* dc,int msaa_index)
 {
     auto data = new std::tuple<DrawCallContext*, int>(dc, msaa_index);
-    auto tri_count = dc->primitives.size();
+    auto tri_count = dc->geometries.size();
     if (tri_count == 0)
     {
         return 0;
     }
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, dc->primitives.size(),
+                          0, dc->geometries.size(),
                           data, rast_tri_execute, rast_tri_complete);
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);

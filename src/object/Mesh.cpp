@@ -13,7 +13,7 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-
+#include "Resource.h"
 #include "CommonMacro.h"
 
 int Mesh::_id = 0;

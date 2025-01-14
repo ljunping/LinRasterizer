@@ -13,8 +13,8 @@
 #include "Mesh.h"
 #include "VertShader.h"
 
-
-static bool less_compare_array(const int* a, const int* b, int count)
+template<class T>
+static bool less_compare_array(const T* a, const T* b, int count)
 {
     for (int i = 0; i < count; ++i)
     {
@@ -23,12 +23,15 @@ static bool less_compare_array(const int* a, const int* b, int count)
     return false;
 }
 
-
-static bool equal_compare_array(const int* a, const int* b, int count)
+template<class T>
+static bool equal_compare_array(const T* a, const T* b, int count)
 {
     for (int i = 0; i < count; ++i)
     {
-        if (a[i]!=b[i]) return false;
+        if (a[i] != b[i])
+        {
+            return false;
+        }
     }
     return true;
 }
@@ -38,8 +41,8 @@ bool less_compare_render_node(const RenderNode& a, const RenderNode& b)
     return a.render_order < b.render_order
         || less_compare_array(a.materials, b.materials,MAX_MATERIAL_COUNT)
         || less_compare_array(a.textures, b.textures,MAX_TEXTURES_COUNT)
-        || a.frag_shader < b.frag_shader;
-
+        || a.frag_shader < b.frag_shader ||
+        a.vert_shader < b.vert_shader;
 }
 
 bool equal_compare_render_node(const RenderNode& a, const RenderNode& b)
@@ -48,10 +51,24 @@ bool equal_compare_render_node(const RenderNode& a, const RenderNode& b)
         a.render_order == b.render_order
         && equal_compare_array(a.materials, b.materials,MAX_MATERIAL_COUNT)
         && equal_compare_array(a.textures, b.textures,MAX_TEXTURES_COUNT)
-        && a.frag_shader == b.frag_shader;
+        && a.frag_shader == b.frag_shader
+        && a.vert_shader == b.vert_shader;
+
+
 }
 
 
+void DrawCallContext::assign_geometry_primitives(GeometryType type, int count)
+{
+    auto _count = geometry_count[type];
+    auto& geometrie_pool = geometrie_pools[type];
+    if (_count != count)
+    {
+        free(geometrie_pool);
+        geometrie_pool = static_cast<Geometry*>(malloc(count * geometry_size(type)));
+        geometry_count[type] = count;
+    }
+}
 
 void RenderNodeComponent::on_create()
 {
@@ -65,11 +82,20 @@ void RenderNodeComponent::on_delete()
     get_current_ctx()->render_node_manager->on_delete_obj(this);
 }
 
+RenderNodeComponent::~RenderNodeComponent()
+{
+
+}
+
+
+MeshProvider::~MeshProvider()
+{
+}
+
 
 
 void MeshProvider::locate_centroid(Camera* camera) const
 {
-    auto mesh = Resource::get_resource<Mesh>(mesh_id);
     if (!mesh)
     {
         return;
@@ -90,21 +116,17 @@ void MeshProvider::locate_centroid(Camera* camera) const
     this->scene_node->set_local_to_global_mat(_locate_mat);
 }
 
-Mesh* MeshProvider::get_mesh() const
-{
-    return Resource::get_resource<Mesh>(mesh_id);
-}
 
-
-Mesh* MeshRender::get_mesh()
+std::shared_ptr<Mesh> MeshRender::get_mesh()
 {
     auto mesh_provider = scene_node->get_component<MeshProvider>();
     if (mesh_provider)
     {
-        return mesh_provider->get_mesh();
+        return mesh_provider->mesh;
     }
     return nullptr;
 }
+
 
 void MeshRender::collect_render_node(Camera* camera,std::vector<RenderNode>& render_nodes)
 {
@@ -116,12 +138,14 @@ void MeshRender::collect_render_node(Camera* camera,std::vector<RenderNode>& ren
     auto& render_node = render_nodes.back();
     render_node.frame_buff_index = this->frame_buff_index;
     render_node.frag_shader = frag_shader;
-    render_node.mesh = scene_node->get_component<MeshProvider>()->mesh_id;
+    render_node.mesh = scene_node->get_component<MeshProvider>()->mesh;
     render_node.model_matrix = this->scene_node->get_local_to_global_mat();
     render_node.render_order = this->render_order;
     render_node.transparent = this->transparent;
     render_node.camera = camera;
     render_node.vert_shader = this->vert_shader;
+    render_node.shadow_caster = this->shader_caster;
+    render_node.emit = false;
     for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
     {
         render_node.materials[i] = this->materials[i];
@@ -130,45 +154,84 @@ void MeshRender::collect_render_node(Camera* camera,std::vector<RenderNode>& ren
     {
         render_node.textures[i] = this->textures[i];
     }
+    render_node.transform = this->scene_node;
 }
 
 
-void RenderNodeManager::collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes, bool transparent)
+
+void GeometryRender::collect_render_node(Camera* camera, std::vector<RenderNode>& render_nodes)
 {
-    for (auto object : objects)
+    if (!camera->is_render_layer(this->render_layer))
     {
-        if (object->transparent == transparent)
+        return;
+    }
+    if (geometry && get_current_ctx()->setting.enable_global_path_trace)
+    {
+        auto& render_node = render_nodes.emplace_back();
+        render_node.model_matrix = this->scene_node->get_local_to_global_mat();
+        render_node.local_geometry = this->geometry;
+        for (int i = 0; i < MAX_MATERIAL_COUNT; ++i)
         {
-            object->collect_render_node(camera, render_nodes);
+            render_node.materials[i] = this->materials[i];
         }
+        for (int i = 0; i < MAX_TEXTURES_COUNT; ++i)
+        {
+            render_node.textures[i] = this->textures[i];
+        }
+        render_node.transform = this->scene_node;
+        render_node.emit = this->emit;
+
     }
 }
 
-MeshRender* add_mesh_render(Transform* node, VertShader* vert_shader, FragShader* frag_shader, Material* material,
-    Texture* texture, int render_layer, bool transparent)
+void RenderNodeManager::collection_render_node(Camera* camera, std::vector<RenderNode>& render_nodes)
 {
-    auto _vert_shader = COPY_OBJECT(vert_shader);
-    auto _frag_shader = COPY_OBJECT(frag_shader);
+    for (auto object : objects)
+    {
+        object->collect_render_node(camera, render_nodes);
+    }
+}
+
+
+MeshRender* add_mesh_render(Transform* node, const SHARE_PTR<VertShader>& vert_shader,
+                            const SHARE_PTR<FragShader>& frag_shader,
+                            const SHARE_PTR<Material>& material,
+                            const SHARE_PTR<Texture>& texture, int render_layer, bool transparent)
+{
+
     auto meshrender = node->add_component<MeshRender>();
-    meshrender->frag_shader = _frag_shader->get_resource_id();
+    meshrender->frag_shader = frag_shader;
+    meshrender->vert_shader = vert_shader;
+    (meshrender->materials[0] = material);
+    meshrender->textures[0] = texture;
     meshrender->frame_buff_index = 0;
     meshrender->transparent = transparent;
     meshrender->render_layer = render_layer;
-    meshrender->materials[0] = material->get_resource_id();
-    meshrender->textures[0] = texture->get_resource_id();
-    meshrender->vert_shader = _vert_shader->get_resource_id();
+
     return meshrender;
 }
 
 
+GeometryRender* add_geometry_render(Transform* node,const SHARE_PTR<Geometry>& geo,
+                                    const SHARE_PTR<Material>& material,
+                                    const SHARE_PTR<Texture>& texture, int render_layer)
+{
+    auto meshrender = node->add_component<GeometryRender>();
+    meshrender->frame_buff_index = 0;
+    meshrender->geometry = geo;
+    meshrender->render_layer = render_layer;
+    meshrender->materials[0] = material;
+    meshrender->textures[0] = texture;
+    return meshrender;
+}
 
 
-Transform* create_mesh_provider(Mesh* mesh)
+Transform* create_mesh_provider(const SHARE_PTR<Mesh>& mesh)
 {
     //mesh
     auto node = CREATE_OBJECT_BY_TYPE(Transform);
     auto mesh_provider = node->add_component<MeshProvider>();
-    mesh_provider->mesh_id = mesh->get_resource_id();
+    mesh_provider->mesh = mesh;
     return node;
 }
 

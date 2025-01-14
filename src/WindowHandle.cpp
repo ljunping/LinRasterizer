@@ -60,7 +60,7 @@ void WindowHandle::on_resize(int _w, int _h)
     }
     default_frame_buff = XCreateImage(display, DefaultVisual(display, screen), DefaultDepth(display, screen),
                               ZPixmap, 0, (char*)malloc(w * h * 4), w, h, 32, 0);
-    std::fill((int*)default_frame_buff->data, (int*)default_frame_buff->data + w * h, BLACK);
+    std::fill_n((int*)default_frame_buff->data, w * h, BLACK);
     frame_buffs[0] = default_frame_buff;
     for (int i = 1; i < MAX_FRAME_BUFFERS; ++i)
     {

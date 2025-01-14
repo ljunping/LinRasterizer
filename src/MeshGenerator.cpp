@@ -21,8 +21,8 @@ void draw_line(Context* ctx, Color* buff, void* data)
         buff[y * w + x] = line->color;
     }
 }
-float __VALUE=0;
-Mesh* generate_sphere(float radius, int stacks, int slices)
+
+std::shared_ptr<Mesh> generate_sphere(float radius, int stacks, int slices)
 {
     float* vert_buff = new float[8 * (stacks + 1) * (slices + 1)];
 
@@ -45,16 +45,16 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
             vert_buff[8 * (stack * (slices + 1) + slice) + 4] = y;
             vert_buff[8 * (stack * (slices + 1) + slice) + 5] = z;
 
-            vert_buff[8 * (stack * (slices + 1) + slice) + 6] = stack*1.0f / stacks;
+            vert_buff[8 * (stack * (slices + 1) + slice) + 6] = stack * 1.0f / stacks;
             vert_buff[8 * (stack * (slices + 1) + slice) + 7] = slice * 1.0f / slices;
             index++;
-
         }
     }
     SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 8 * (stacks + 1) * (slices + 1));
-    _Attributes->bind_attribute(POS,3, 0, 8);
-    _Attributes->bind_attribute(NORMAL,3, 3, 8);
+
+    auto _Attributes = Resource::create_unnamed_resource<Mesh>(share_vert_buff, 8 * (stacks + 1) * (slices + 1));
+    _Attributes->bind_attribute(POS, 3, 0, 8);
+    _Attributes->bind_attribute(NORMAL, 3, 3, 8);
     _Attributes->bind_attribute(UV, 2, 6, 8);
     std::vector<int> eb0;
     // Generate triangles
@@ -74,7 +74,7 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
                 eb0.emplace_back(i3);
                 eb0.emplace_back(i2);
             }
-            if (stack != stacks- 1)
+            if (stack != stacks - 1)
             {
                 eb0.emplace_back(i3);
                 eb0.emplace_back(i4);
@@ -88,7 +88,7 @@ Mesh* generate_sphere(float radius, int stacks, int slices)
     return _Attributes;
 }
 
-Mesh* generate_quad()
+std::shared_ptr<Mesh> generate_quad()
 {
     float* vert_buff = new float[4 * 8]
     {
@@ -97,9 +97,8 @@ Mesh* generate_quad()
         -0.5, 0.5, 0, 0, 0, 1, 0, 1,
         0.5, 0.5, 0, 0, 0, 1, 1, 1,
     };
-
     SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 4*8);
+    auto _Attributes = Resource::create_unnamed_resource<Mesh>(share_vert_buff, 4 * 8);
     _Attributes->bind_attribute(POS,3, 0, 8);
     _Attributes->bind_attribute(NORMAL,3, 3, 8);
     _Attributes->bind_attribute(UV, 2, 6, 8);
@@ -109,7 +108,7 @@ Mesh* generate_quad()
     return _Attributes;
 }
 
-Mesh* generate_tri()
+std::shared_ptr<Mesh> generate_tri()
 {
     float* vert_buff = new float[4 * 8]
     {
@@ -120,7 +119,7 @@ Mesh* generate_tri()
     };
 
     SHARE_PTR<float[]> share_vert_buff(vert_buff);
-    auto _Attributes = CREATE_OBJECT_BY_TYPE(Mesh, share_vert_buff, 4*8);
+    auto _Attributes = Resource::create_unnamed_resource<Mesh>(share_vert_buff, 4 * 8);
     _Attributes->bind_attribute(POS,3, 0, 8);
     _Attributes->bind_attribute(NORMAL,3, 3, 8);
     _Attributes->bind_attribute(UV, 2, 6, 8);
@@ -129,3 +128,5 @@ Mesh* generate_tri()
     _Attributes->calculate_tangents();
     return _Attributes;
 }
+
+

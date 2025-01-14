@@ -4,10 +4,12 @@
 
 #include "BVHTree.h"
 
+#include "CommonMacro.h"
 #include "JobSystem.h"
+#include "Mesh.h"
 #include "TrianglePrimitive.h"
 
-void BVHTree::build(std::vector<TrianglePrimitive*>& geometries, int depth)
+void BVHTree::build(std::vector<Geometry*>& geometries, int depth)
 {
     if (geometries.size() == 0)
     {
@@ -18,18 +20,20 @@ void BVHTree::build(std::vector<TrianglePrimitive*>& geometries, int depth)
     root = build_BVH(geometries.begin(), geometries.end(), depth);
 }
 
+
+
 void BVHTree::alloc_blocks(int count)
 {
     for (int i = 0; i < count; ++i)
     {
-        auto var = (BVHNode*)malloc(block_size*sizeof(BVHNode));
+        auto var = static_cast<BVHNode*>(malloc(block_size * sizeof(BVHNode)));
         nodes.emplace_back(var);
     }
 }
 
 BVHNode* BVHTree::alloc_node()
 {
-    while (node_index+1>=nodes.size()*block_size)
+    while (node_index + 1 >= nodes.size() * block_size)
     {
         alloc_blocks(1);
     }
@@ -39,8 +43,8 @@ BVHNode* BVHTree::alloc_node()
     return nodes[i] + j;
 }
 
-BVHNode* BVHTree::build_BVH(std::vector<TrianglePrimitive*>::iterator begin,
-                            std::vector<TrianglePrimitive*>::iterator end, int depth)
+BVHNode* BVHTree::build_BVH(std::vector<Geometry*>::iterator begin,
+                            std::vector<Geometry*>::iterator end, int depth)
 {
     int size = end - begin;
     if (size == 1)
@@ -48,7 +52,7 @@ BVHNode* BVHTree::build_BVH(std::vector<TrianglePrimitive*>::iterator begin,
         return new_BVHNode((*begin)->box, nullptr, nullptr, *begin);
     }
     int axis = depth % 3;
-    parallel_sort(begin, end, [axis](TrianglePrimitive* a, TrianglePrimitive* b)
+    parallel_sort(begin, end, [axis](Geometry* a, Geometry* b)
     {
         return a->box.min[axis] < b->box.min[axis];
     });
@@ -65,7 +69,7 @@ BVHNode* BVHTree::build_BVH(std::vector<TrianglePrimitive*>::iterator begin,
 bool BVHTree::traverse_BVH(const BVHNode* node, const L_MATH::Vec<float, 3>& origin,
                                   const L_MATH::Vec<float, 3>& dir, float tMin, float tMax,
                                   std::vector<RayCasterResult>& result,
-                                  bool(* condition)(TrianglePrimitive*,void *),void *data
+                                  bool(* condition)(Geometry*,void *),void *data
                                   )
 {
     // intersect_traverse_count++;
@@ -80,7 +84,7 @@ bool BVHTree::traverse_BVH(const BVHNode* node, const L_MATH::Vec<float, 3>& ori
             return false;
         }
         result.emplace_back();
-        if (!node->geometry->intersect_3D(origin, dir, &result.back()))
+        if (!node->geometry->intersect(origin, dir, &result.back()))
         {
             result.pop_back();
             return false;
@@ -118,7 +122,7 @@ bool BVHTree::intersect_box(const Box<3>& box, const L_MATH::Vec<float, 3>& orig
     return tMax > 0;
 }
 
-inline BVHNode* BVHTree::new_BVHNode(Box<3>& box_3d, BVHNode* left, BVHNode* right, TrianglePrimitive* tri)
+inline BVHNode* BVHTree::new_BVHNode(Box<3>& box_3d, BVHNode* left, BVHNode* right, Geometry* tri)
 {
     auto bvh_node = alloc_node();
     bvh_node->aabb = box_3d;
@@ -138,15 +142,44 @@ inline void BVHTree::clear()
     node_index = 0;
 }
 
+bool BVHTree::intersect_nearest(const L_MATH::Vec<float, 3>& origin, const L_MATH::Vec<float, 3>& dir,
+                                RayCasterResult& result, bool (*condition)(Geometry*, void*), void* data)
+{
+
+    std::vector<RayCasterResult> results;
+    intersect_traverse(origin, dir, results, condition, data);
+    if (results.empty())
+    {
+        return false;
+    }
+    int index = -1;
+    for (int i = 0; i < results.size(); ++i)
+    {
+        if (index == -1 && results[i].t > EPSILON)
+        {
+            index = i;
+        }
+        if (index >= 0 && results[i].t > EPSILON && results[i].t < results[index].t)
+        {
+            index = i;
+        }
+    }
+    if (index >= 0)
+    {
+        result = results[index];
+    }
+    return index >= 0;
+}
+
+
+
 bool BVHTree::intersect_traverse(const L_MATH::Vec<float, 3>& origin, const L_MATH::Vec<float, 3>& dir,
-                                        std::vector<RayCasterResult>& result,
-                                        bool(* condition)(TrianglePrimitive*,void *),void *data)
+                                 std::vector<RayCasterResult>& result,
+                                 bool(* condition)(Geometry*,void *),void *data)
 {
     float minT = -INFINITY;
     float maxT = INFINITY;
-    // intersect_traverse_count = 0;
     bool res = traverse_BVH(root, origin, dir, minT, maxT, result,condition,data);
-    // printf("intersect_traverse %d\n", intersect_traverse_count);
     return res;
 }
 
@@ -174,7 +207,7 @@ bool BVHTree::intersect_compare_distance(const L_MATH::Vec<float, 3>& origin, co
         {
             break;
         }
-        if (node->geometry && node->geometry->intersect_3D(origin, dir, result))
+        if (node->geometry && node->geometry->intersect(origin, dir, result))
         {
             auto dist = geometrie_distance(result);
             if (dist > maxDistance)
