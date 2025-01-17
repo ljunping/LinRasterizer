@@ -181,15 +181,14 @@ std::shared_ptr<T> TypeFactory::copy_share_ptr_object(T* obj, Dealloc dealloc)
     SHARE_PTR<Object> inst;
     if(dealloc)
     {
-        inst = create_custom_share_type_inst<T>(dealloc);
+        inst = SHARE_PTR<T>(copy_object(obj), dealloc);
+        weak_ptr_objet_inst_map[inst->instance_id] = inst;
     }else
     {
-        inst = create_share_type_inst<T>();
+        inst = SHARE_PTR<T>(copy_object(obj), destroy_type_inst);
+        weak_ptr_objet_inst_map[inst->instance_id] = inst;
     }
-    auto instance_id = inst->instance_id;
-    obj->clone(inst.get());
-    inst->instance_id = instance_id;
-    return inst;
+    return std::dynamic_pointer_cast<T>(inst);
 }
 
 

@@ -467,6 +467,7 @@ namespace L_MATH
         template <int Row>
         Vec<T, Row> mul_transpose(const Mat<T, Row, Col>& mat) const;
 
+        int find_index(T v) const;
 
         template <int Row>
         explicit Vec(const Mat<T, Row, 1>& mat);
@@ -837,6 +838,19 @@ namespace L_MATH
             }
         }
         return result;
+    }
+
+    template <typename T, int Col>
+    int Vec<T, Col>::find_index(T v) const
+    {
+        for (int i = 0; i < Col; ++i)
+        {
+            if (data[i] == v)
+            {
+                return i;
+            }
+        }
+        return -1;
     }
 
 

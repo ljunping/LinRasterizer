@@ -18,6 +18,7 @@
 #include "Texture.h"
 #include "VertShader.h"
 
+struct GlVert;
 class Transform;
 struct Geometry;
 struct Fragment;
@@ -78,6 +79,10 @@ public:
     std::vector<Vec4> tbn_light_dirs;
 };
 
+
+# define CLIP_NEAR_VERTEX_MAX_COUNT 2
+# define CLIP_NEAR_TRI_MAX_COUNT 2
+
 class DrawCallContext
 {
 private:
@@ -91,42 +96,65 @@ public:
     std::unordered_map<Mesh*, int> mesh_2_index;
     std::vector<int> mesh_vert_count = std::vector(1, 0);
     std::vector<int> mesh_tri_count = std::vector(1, 0);
-    std::vector<RenderNode*> geometry_2_node;
+    std::vector<const RenderNode*> geometry_2_node;
     std::vector<Geometry*> geometries;
     Geometry* geometrie_pools[GeometryCount]{};
     int geometry_count[GeometryCount]{};
+    bool* geometry_invalid[GeometryCount]{};
+    bool* vert_invalid{};
     int w{}, h{};
     Fragment* fragment_map{};
-    Camera* camera{};
+    Frustum view_frustum;
     float* depth_buff{};
     Color* frame_buff{};
     Context* ctx{};
     DrawCallContextSetting setting;
-    VertexOutput* outputs{};
     bool is_set_render_node = false;
+    Camera* camera{};
     Mat44 proj_matrix;
     Mat44 view_matrix;
+    Mat44 inv_view_matrix;
     Vec3 view_world_pos;
     SHARE_PTR<Material> materials[MAX_MATERIAL_COUNT]{};
     SHARE_PTR<Texture> textures[MAX_TEXTURES_COUNT]{};
     SHARE_PTR<FragShader> frag_shader{};
     SHARE_PTR<VertShader> vert_shader{};
     BVHTree* bvh_tree{};
-    int gl_position_count = 0;
-    Vec4* gl_positions{};
+    int gl_vert_count = 0;
+    GlVert* gl_verts{};
     ~DrawCallContext();
+    int get_mesh_vert_count() const;
+    int get_mesh_tri_count() const;
+    void create_vert(int vert_index, int mesh_vert_index, std::shared_ptr<Mesh>& mesh);
+    TrianglePrimitive* create_tri(int tri_index, int mesh_index, int mesh_tri_index);
+    TrianglePrimitive* create_tri(int tri_index, int v0, int v1, int v2);
+
+    void create_vert(int vert_index
+                     , int mesh_tri_index,
+                     std::shared_ptr<Mesh>& mesh,
+                     const L_MATH::Vec<float, 3>& clip_alpha);
+
+    const RenderNode* get_render_node(int vert_index) const;
     void set_mesh_render_params(const RenderNode& node);
     void add_render_node(RenderNode& node);
+    const RenderNode* get_render_node_by_mesh(std::shared_ptr<Mesh>& mesh) const;
     void assign_geometry_primitives(GeometryType type, int count);
-    RenderNode* get_render_node(Mesh* mesh);
-    std::shared_ptr<Mesh> get_mesh(int vert_index, int& mesh_index) const;
-    std::shared_ptr<Mesh> get_mesh_by_tri_index(int tri_index, int& mesh_tri_index) const;
-    int get_mesh_vert_index(Mesh* mesh, int mesh_index) ;
-    void get_tri_mesh_index (int index, TrianglePrimitive& tri);;
+    void assign_vert(int vert_count);
+    void raycaster_process_geometry(int mesh_tri_count);
+    int get_mesh_index(int vert_index, int& mesh_vert_index) const;
+    int get_mesh_index_by_tri_index(int tri_index, int& mesh_tri_index) const;
+    bool get_clip_near_plane_alpha(const TrianglePrimitive* triangle_primitive,
+                                   std::vector<Vec3>& clip_vertices_alpha) const;
     template <int N>
-    void get_vert_attribute_value(Mesh*, int vert_index, int attribute_index, L_MATH::Vec<float, N>& result);
-    void create_vert_attribute(Mesh* mesh, int v0, int v1, int v2,
-                               const L_MATH::Vec<float, 3>& alpha, VertexInterpolation& result);
+    void get_vert_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<float, N>& result);
+    void create_vert_attribute(int vert_index0, int vert_index1, int vert_index2,
+                               const L_MATH::Vec<float, 3>& alpha, VertexInterpolation& result) const;
+    void build_vert_interpolation(int v0) const;
+    static void interpolation_attribute(
+        const VertexInterpolation& v0, const VertexInterpolation& v1, const VertexInterpolation& v2,
+        VertexInterpolation&
+        result, const L_MATH::Vec<float, 3>& alpha);
+    void interpolation_out_put(int v0, int v1, int v2, const L_MATH::Vec<float, 3>& alpha, VertexInterpolation&) const;
 };
 
 
@@ -134,16 +162,23 @@ public:
 //这个类纯数据类，不要继承其他类，不能执行析构函数
 struct VertexInterpolation
 {
-    DrawCallContext* draw_call_context{};
-    Mesh* mesh_ptr{};
     float values[AttributeTypeCount * 4]{};
     Vec3 tangent;
+    Mesh* mesh{};
     VertexOutput output;
-    int v[3]{};
-    Vec3 alpha;
     template <int N>
     void get_attribute_value(int attribute_index, L_MATH::Vec<float, N>& result);
-    void calculate_values();
+    void interpolation();
+};
+
+struct GlVert
+{
+    const RenderNode* render_node{};
+    int mesh_vert_index[3]{};
+    Vec3 alpha;
+    bool mesh_vert = false;
+    Vec4 gl_position;
+    VertexInterpolation vertex_interpolation{};
 };
 
 struct Fragment

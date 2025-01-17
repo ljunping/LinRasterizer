@@ -174,32 +174,22 @@ void Mesh::bind_attribute(AttributeType type, int attr_unit_size, int offset, in
 }
 
 
-
-
-void Mesh::generate_triangle_index(TrianglePrimitive& tri, int tri_index)
+void Mesh::get_triangle_index(int* result, int tri_index) const
 {
-    tri.id = tri_index;
-    tri.mesh = this;
     if (this->ebo.empty())
     {
-        tri.vert_index[0] = tri_index * 3;
-        tri.vert_index[1] = tri_index * 3 + 1;
-        tri.vert_index[2] = tri_index * 3 + 2;
-    }else
+        result[0] = tri_index * 3;
+        result[1] = tri_index * 3 + 1;
+        result[2] = tri_index * 3 + 2;
+    }
+    else
     {
-        tri.vert_index[0] = ebo[tri_index * 3];
-        tri.vert_index[1] = ebo[tri_index * 3 + 1];
-        tri.vert_index[2] = ebo[tri_index * 3 + 2];
+        result[0] = ebo[tri_index * 3];
+        result[1] = ebo[tri_index * 3 + 1];
+        result[2] = ebo[tri_index * 3 + 2];
     }
 }
 
-void Mesh::generate_triangle(TrianglePrimitive& tri, int tri_index)
-{
-    this->generate_triangle_index(tri, tri_index);
-    this->get_attribute_value(tri.vert_index[0], POS, tri.v[0]);
-    this->get_attribute_value(tri.vert_index[1], POS, tri.v[1]);
-    this->get_attribute_value(tri.vert_index[2], POS, tri.v[2]);
-}
 
 int Mesh::tri_count() const
 {
@@ -239,18 +229,18 @@ void Mesh::calculate_tangents()
     std::vector<int> tangents_count(vert_count, 0);
     for (int i = 0; i <tri_count(); ++i)
     {
-        TrianglePrimitive triangle;
-        generate_triangle_index(triangle, i);
+        int mesh_vert_index[3];
+        get_triangle_index(mesh_vert_index, i);
 
         Vec2 uv0, uv1, uv2;
-        get_attribute_value(triangle.vert_index[0], UV, uv0);
-        get_attribute_value(triangle.vert_index[1], UV, uv1);
-        get_attribute_value(triangle.vert_index[2], UV, uv2);
+        get_attribute_value(mesh_vert_index[0], UV, uv0);
+        get_attribute_value(mesh_vert_index[1], UV, uv1);
+        get_attribute_value(mesh_vert_index[2], UV, uv2);
 
         Vec3 v0, v1, v2;
-        get_attribute_value(triangle.vert_index[0], POS, v0);
-        get_attribute_value(triangle.vert_index[1], POS, v1);
-        get_attribute_value(triangle.vert_index[2], POS, v2);
+        get_attribute_value(mesh_vert_index[0], POS, v0);
+        get_attribute_value(mesh_vert_index[1], POS, v1);
+        get_attribute_value(mesh_vert_index[2], POS, v2);
 
         auto p1 = v1 - v0;
         auto p2 = v2 - v0;
@@ -264,12 +254,12 @@ void Mesh::calculate_tangents()
         }
         float f = 1 / inv_f;
         auto tan = ((p1 * uv20[1] - p2 * uv10[1]) * f);
-        tangents[triangle.vert_index[0]] += tan;
-        tangents[triangle.vert_index[1]] += tan;
-        tangents[triangle.vert_index[2]] += tan;
-        ++tangents_count[triangle.vert_index[0]];
-        ++tangents_count[triangle.vert_index[1]];
-        ++tangents_count[triangle.vert_index[2]];
+        tangents[mesh_vert_index[0]] += tan;
+        tangents[mesh_vert_index[1]] += tan;
+        tangents[mesh_vert_index[2]] += tan;
+        ++tangents_count[mesh_vert_index[0]];
+        ++tangents_count[mesh_vert_index[1]];
+        ++tangents_count[mesh_vert_index[2]];
     }
 
     for (int i = 0; i < tangents_count.size(); ++i)

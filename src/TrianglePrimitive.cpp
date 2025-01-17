@@ -96,9 +96,9 @@ L_MATH::Vec<float, 2> TrianglePrimitive::get_uv(const L_MATH::Vec<float, 3>& poi
     Vec3 alpha;
     barycentric3D(point, alpha);
     Vec2 uv0, uv1, uv2;
-    this->mesh->get_attribute_value(this->vert_index[0], UV, uv0);
-    this->mesh->get_attribute_value(this->vert_index[1], UV, uv1);
-    this->mesh->get_attribute_value(this->vert_index[2], UV, uv2);
+    this->ctx->get_vert_attribute_value(this->gl_vert_index[0], UV, uv0);
+    this->ctx->get_vert_attribute_value(this->gl_vert_index[1], UV, uv1);
+    this->ctx->get_vert_attribute_value(this->gl_vert_index[2], UV, uv2);
     return uv0 * alpha[0] + uv1 * alpha[1] + uv2 * alpha[2];
 }
 
@@ -174,7 +174,6 @@ void TrianglePrimitive::update(const L_MATH::Mat<float, 4, 4>& mat)
 
 void TrianglePrimitive::update_param()
 {
-    discard = false;
     box.max = v[0];
     box.min = v[0];
     box.expand(v[1]);
@@ -189,14 +188,11 @@ void TrianglePrimitive::update_param()
     cache_inv_cross_dir_z = 1 / (cross_dir[2]);
     cache_inv_cross_dir = cache_normal_dir * (1 / cross_dir.sqrt_magnitude());
     clipped = false;
-    if (L_MATH::is_zero(cross_dir[2]) || L_MATH::is_zero(cache_normal_dir[2])||!ccw())
-    {
-        discard = true;
-    }
+    out_near = false;
 }
 
 
-void TrianglePrimitive::clip_2D()
+void TrianglePrimitive::clip_st_box()
 {
     if (clipped)
     {

@@ -44,12 +44,14 @@ public:
     std::vector<Vec3> tangents;
     ~Mesh();
     void bind_attribute(AttributeType type, int attr_unit_size, int offset, int stride);
-    void generate_triangle_index(TrianglePrimitive& tri, int tri_index);
-    void generate_triangle(TrianglePrimitive& tri, int tri_index);
+    void get_triangle_index(int* result, int tri_index) const;
     int tri_count() const;
     float* operator[](int vert_index) const;
     template <int N>
     void get_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<float, N>& result) const;
+    template <int N>
+    void get_attribute_value(int v0, int v1, int v2,Vec3& alpha, int attribute_index,
+                             L_MATH::Vec<float, N>& result) const;
     Vec3 get_mesh_centroid();
     void calculate_tangents();
     Box<3> get_box();
@@ -96,7 +98,17 @@ void Mesh::get_attribute_value(int vert_index, int attribute_index, L_MATH::Vec<
     }
 }
 
+template <int N>
+void Mesh::get_attribute_value(int v0, int v1, int v2, L_MATH::Vec<float, 3>& alpha, int attribute_index,
+    L_MATH::Vec<float, N>& result) const
+{
+    L_MATH::Vec<float, N> a0, a1, a2;
+    get_attribute_value(v0, attribute_index, a0);
+    get_attribute_value(v1, attribute_index, a1);
+    get_attribute_value(v2, attribute_index, a2);
+    result = a0 * alpha[0] + a1 * alpha[1] + a2 * alpha[2];
 
+}
 
 
 #endif //ATTRIBUTE_H

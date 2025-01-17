@@ -66,7 +66,63 @@ void DrawCallContext::assign_geometry_primitives(GeometryType type, int count)
     {
         free(geometrie_pool);
         geometrie_pool = static_cast<Geometry*>(malloc(count * geometry_size(type)));
+        geometry_invalid[type] = static_cast<bool*>(malloc(count));
         geometry_count[type] = count;
+    }
+}
+
+void DrawCallContext::assign_vert(int vert_count)
+{
+    if (vert_count != this->gl_vert_count)
+    {
+        this->gl_vert_count = vert_count;
+        free(this->gl_verts);
+        this->gl_verts = static_cast<GlVert*>(malloc(sizeof(GlVert) * vert_count));
+        this->vert_invalid = static_cast<bool*>(malloc(sizeof(bool) * vert_count));
+    }
+}
+
+void DrawCallContext::raycaster_process_geometry(int mesh_tri_count)
+{
+    int geometry_index = mesh_tri_count;
+    std::vector<int> render_nodes[GeometryCount];
+    int geometry_count[GeometryCount]{};
+    int _geometry_sum = mesh_tri_count;
+    for (int i = 0; i < this->nodes.size(); ++i)
+    {
+        auto& node = this->nodes[i];
+        if (node.local_geometry)
+        {
+            render_nodes[node.local_geometry->geometry_type].emplace_back(i);
+            geometry_count[node.local_geometry->geometry_type]++;
+            _geometry_sum++;
+        }
+    }
+    this->geometry_2_node.resize(_geometry_sum);
+    this->geometries.resize(_geometry_sum);
+    for (int i = 0; i < GeometryCount; ++i)
+    {
+        auto _GeometryType = static_cast<GeometryType>(i);
+        int offset = i == TRI ? mesh_tri_count : 0;
+        int _geometry_count = geometry_count[i] + offset;
+        this->assign_geometry_primitives(static_cast<GeometryType>(i), _geometry_count);
+        for (int j = offset; j < _geometry_count; ++j)
+        {
+            auto render_node_indx = render_nodes[i][j - offset];
+            auto& render_node = this->nodes[render_node_indx];
+            auto _Geometry = reinterpret_cast<Geometry*>(
+                reinterpret_cast<char*>(this->geometrie_pools[i]) +
+                j * geometry_size(_GeometryType));
+            this->geometry_invalid[_GeometryType][j] = true;
+            build_geometry(_GeometryType, _Geometry);
+            render_node.local_geometry->clone(_Geometry);
+            _Geometry->id = geometry_index;
+            this->geometry_2_node[_Geometry->id] = &render_node;
+            this->geometries[geometry_index] = _Geometry;
+            _Geometry->transform(render_node.model_matrix);
+            render_node.transform_geometry = _Geometry;
+            geometry_index++;
+        }
     }
 }
 
@@ -200,8 +256,8 @@ MeshRender* add_mesh_render(Transform* node, const SHARE_PTR<VertShader>& vert_s
 {
 
     auto meshrender = node->add_component<MeshRender>();
-    meshrender->frag_shader = frag_shader;
-    meshrender->vert_shader = vert_shader;
+    meshrender->frag_shader = Resource::copy_resource(frag_shader);
+    meshrender->vert_shader = Resource::copy_resource(vert_shader);
     (meshrender->materials[0] = material);
     meshrender->textures[0] = texture;
     meshrender->frame_buff_index = 0;

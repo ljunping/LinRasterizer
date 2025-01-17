@@ -55,7 +55,7 @@ void FragShader::df(int frag_index_l, int frag_index_r, int attribute_index, L_M
     {
         return;
     }
-    if (fragment_l.interpolation_data.mesh_ptr != fragment_r.interpolation_data.mesh_ptr)
+    if (fragment_l.interpolation_data.mesh != fragment_r.interpolation_data.mesh)
     {
         return;
     }
@@ -174,9 +174,6 @@ Vec4 TextureFragShader::run(int frag_index)
 {
     Vec4 color;
     sample_texture(0, frag_index, color);
-    auto material = this->draw_call->materials;
-    auto blend_color = material[0]->get_Vec4_uniform(MATERIAL_BLEND_CONST_COLOR1);
-    color = blend4v(blend_color, color, blend_color[3]);
     return color;
 }
 
@@ -287,8 +284,7 @@ L_MATH::Vec<float, 4> MaterialBRDFFragShader::run(int frag_index)
     Vec3& frag_color_v3 = static_cast<L_MATH::Vec<float, 3>&>(frag_color);
     int light_index = 0;
     frag_color_v3[3] = 1;
-    frag_color_v3 += texture_color * material->get_Vec4_uniform(MATERIAL_ENV_LIGHT) * std::max(
-        L_MATH::dot(tbn_view_dir, tbn_view_normal), 0.3f);
+    // frag_color_v3 += texture_color * material->get_Vec4_uniform(MATERIAL_ENV_LIGHT);
     for (auto light : draw_call->ctx->light_manager->get_objects())
     {
         auto calculate_shadow = light->calculate_shadow(draw_call->camera, world_pos);

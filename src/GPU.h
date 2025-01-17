@@ -45,6 +45,7 @@ class GPU
 public:
     static void begin();
     static void end();
+    static void prepare_ctx(DrawCallContext* dc);
     static void run(GPUCmds& cmd);
     static void wait_finish() ;
 };

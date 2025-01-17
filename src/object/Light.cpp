@@ -89,7 +89,6 @@ void SpotLight::update(float delta_time)
     Vec3 r, t, s;
     L_MATH::decompose_trs(rotate, t, r, s);
     this->scene_node->local_euler_angles = r * 180 / PI;
-    global_mat = this->scene_node->get_local_to_global_mat();
 }
 
 Vec3 SpotLight::calculate_radiance(L_MATH::Vec<float, 3> pos)
@@ -99,7 +98,7 @@ Vec3 SpotLight::calculate_radiance(L_MATH::Vec<float, 3> pos)
     auto dir = pos - light_pos;
     auto sqrt_magnitude = dir.sqrt_magnitude();
     dir /= sqrt_magnitude;
-    if (sqrt_magnitude > max_distance)
+    if (sqrt_magnitude > max_distance || sqrt_magnitude < radius)
     {
         return Vec3::ZERO;
     }
@@ -361,19 +360,23 @@ void SpotLight::collect_draw_call_cmds(Camera* camera,std::vector<GPUCmds>& d_cm
     auto& light_draw_info = light_draw_infos[camera];
     draw_call_context.setting = ctx->setting;
     draw_call_context.setting.msaa_factor = 1;
-    draw_call_context.setting.run_fragment=true;
+    draw_call_context.setting.run_fragment = true;
     draw_call_context.frame_buff = light_draw_info.shadow_map;
     draw_call_context.fragment_map = light_draw_info.fragment_map;
     draw_call_context.depth_buff = light_draw_info.depth_buff;
+    draw_call_context.view_frustum = light_draw_info.frustum;
     draw_call_context.frag_shader = light_shadow_frag_shader;
     draw_call_context.vert_shader = light_shadow_map_vert_shader;
     draw_call_context.view_matrix = light_draw_info.view;
     draw_call_context.proj_matrix = light_draw_info.proj;
+    draw_call_context.inv_view_matrix = this->scene_node->get_local_to_global_mat();
     draw_call_context.setting.background_color = BLACK;
     draw_call_context.setting.enable_light_interpolation = false;
     draw_call_context.view_world_pos = this->scene_node->get_global_pos();
+
     draw_call_context.host = this;
     draw_call_context.setting.enable_global_path_trace = false;
+    draw_call_context.setting.enable_edge = false;
     d_cmds.emplace_back(draw_call_context,4,CLEAR_DEPTH,CLEAR_FRAG,CLEAR_FRAME_BUFF,DRAW);
 }
 

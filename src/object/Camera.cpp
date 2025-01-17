@@ -26,9 +26,9 @@ static void window_resize(Camera* camera)
         free(camera->depth_buff);
     }
     camera->fragment_map = static_cast<Fragment*>(malloc(
-        sizeof(Fragment) * w * h * current_ctx->setting.msaa_factor * current_ctx->setting.msaa_factor));
+        sizeof(Fragment) * w * h * current_ctx->setting.msaa_factor));
     camera->depth_buff = static_cast<float*>(malloc(
-        sizeof(float) * w * h * current_ctx->setting.msaa_factor * current_ctx->setting.msaa_factor));
+        sizeof(float) * w * h * current_ctx->setting.msaa_factor));
     camera->view_frustum.aspect_ratio = w / static_cast<float>(h);
     camera->set_dirty();
 
@@ -142,11 +142,13 @@ void Camera::prepare_context(Context*& ctx, DrawCallContext& draw_call_context)
     draw_call_context.frame_buff = ctx->get_frame_buffer(0);
     draw_call_context.view_matrix = this->get_view_mat();
     draw_call_context.proj_matrix = this->get_proj_mat();
+    draw_call_context.inv_view_matrix = this->scene_node->get_local_to_global_mat();
     draw_call_context.setting = ctx->setting;
     draw_call_context.view_world_pos = this->scene_node->get_global_pos();
     draw_call_context.setting.background_color = this->background_color;
     draw_call_context.camera = this;
     draw_call_context.host = this;
+    draw_call_context.view_frustum = view_frustum;
 }
 
 void Camera::prepare_global_draw_call(std::vector<GPUCmds>& d_cmds, Context* ctx, DrawCallContext& draw_call_context,
@@ -158,7 +160,7 @@ void Camera::prepare_global_draw_call(std::vector<GPUCmds>& d_cmds, Context* ctx
     {
         d_cmd.context.add_render_node(render_node);
     }
-    global_shader = Resource::get_or_create_default_resource<GlobalRayTraceVertShader>();
+    global_shader = Resource::copy_resource(Resource::get_or_create_default_resource<GlobalRayTraceVertShader>());
     d_cmd.context.vert_shader = global_shader;
     d_cmd.context.setting.enable_light_interpolation = false;
     d_cmd.context.setting.build_bvh = true;

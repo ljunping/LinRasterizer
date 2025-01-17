@@ -364,6 +364,7 @@ void Texture::sample(const L_MATH::Vec<float, 2> &uv, float lod, Vec4& result)
 
 PureColorTexture::PureColorTexture(const L_MATH::Vec<float, 4>& color): color(color)
 {
+    this->channels = 4;
 }
 
 void PureColorTexture::sample(const L_MATH::Vec<float, 2>& uv, float lod, L_MATH::Vec<float, 4>& result)

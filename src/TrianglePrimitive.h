@@ -20,15 +20,15 @@ struct  VertexInterpolation;
 struct TrianglePrimitive : Geometry
 {
     TrianglePrimitive();
-    Mesh* mesh{};
-    int vert_index[3];
+    DrawCallContext* ctx{};
+    int gl_vert_index[3];
     Vec3 v[3];
     Vec3 cache_normal_dir;
     float cache_inv_cross_dir_z;
     Vec3 cache_inv_cross_dir;
     float cache_area;
     bool clipped = false;
-    bool discard = false;
+    bool out_near = false;
     float d;
     Vec3 cache_inv_w;
     Vec3 clip_vertices[MAX_CLIP_VERT_COUNT];
@@ -53,8 +53,7 @@ struct TrianglePrimitive : Geometry
     void barycentric3D(const L_MATH::Vec<float, 3>&, L_MATH::Vec<float, 3>& alpha) const;
     void update(const Mat44& mat);
     void update_param();
-    void clip_2D();
-
+    void clip_st_box();
 };
 
 

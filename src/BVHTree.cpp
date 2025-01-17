@@ -15,6 +15,15 @@ void BVHTree::build(std::vector<Geometry*>& geometries, int depth)
     {
         return;
     }
+    int i = 0;
+    for (auto geometry : geometries)
+    {
+        if(        geometry->id>50000)
+        {
+            DEBUG_VAR;
+        }
+        i++;
+    }
     clear();
     block_size = L_MATH::floor_pot(geometries.size());
     root = build_BVH(geometries.begin(), geometries.end(), depth);

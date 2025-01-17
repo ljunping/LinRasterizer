@@ -92,7 +92,7 @@ int GPU::run_frag_shader(DrawCallContext* dc)
     {
         auto clear_vert_output = JOB_SYSTEM.create_job_group(prepare_fence);
         JOB_SYSTEM.alloc_jobs(clear_vert_output, 0,
-                              0, dc->gl_position_count,
+                              0, dc->gl_vert_count,
                               dc, clear_vert_output_execute, default_complete);
 
         JOB_SYSTEM.submit_job_group(clear_vert_output);
@@ -155,55 +155,38 @@ void GPU::end()
     wait_finish();
 }
 
+void GPU::prepare_ctx(DrawCallContext* dc)
+{
+    int vert_count = dc->get_mesh_vert_count();
+    int mesh_tri_count = dc->get_mesh_tri_count();
+    if (dc->setting.enable_ray_cast || dc->setting.enable_global_path_trace)
+    {
+        dc->raycaster_process_geometry(mesh_tri_count);
+    }
+    else
+    {
+        for (const auto& mesh : dc->meshes)
+        {
+            vert_count += mesh->tri_count() * CLIP_NEAR_VERTEX_MAX_COUNT;
+        }
+        mesh_tri_count *= CLIP_NEAR_TRI_MAX_COUNT;
+        dc->geometry_2_node.resize(mesh_tri_count);
+        dc->geometries.resize(mesh_tri_count);
+        dc->assign_geometry_primitives(TRI, mesh_tri_count);
+    }
+    dc->assign_vert(vert_count);
+    auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
+    JOB_SYSTEM.alloc_jobs(job_group, 0,
+                          0, std::max(vert_count, mesh_tri_count),
+                          dc, prepare_ctx_execute, default_complete);
+    JOB_SYSTEM.submit_job_group(job_group);
+    update_frame_job_id(job_group);
+}
+
 
 void GPU::process_primitives(DrawCallContext* dc)
 {
-    std::vector<std::tuple<DrawCallContext*,Mat44>> data(dc->meshes.size());
-    int mesh_tri_count = 0;
-    for (int i = 0; i < dc->meshes.size(); ++i)
-    {
-        auto& mesh = dc->meshes[i];
-        mesh_tri_count += mesh->tri_count();
-    }
-    int geometry_index = mesh_tri_count;
-    std::vector<int> render_nodes[GeometryCount];
-    int geometry_count[GeometryCount]{};
-    int _geometry_sum = mesh_tri_count;
-    for (int i = 0; i < dc->nodes.size(); ++i)
-    {
-        auto& node = dc->nodes[i];
-        if (node.local_geometry)
-        {
-            render_nodes[node.local_geometry->geometry_type].emplace_back(i);
-            geometry_count[node.local_geometry->geometry_type]++;
-            _geometry_sum++;
-        }
-    }
-    dc->geometry_2_node.resize(_geometry_sum);
-    dc->geometries.resize(_geometry_sum);
-    for (int i = 0; i < GeometryCount; ++i)
-    {
-        int offset = i == TRI ? mesh_tri_count : 0;
-        auto _GeometryType = static_cast<GeometryType>(i);
-        dc->assign_geometry_primitives(static_cast<GeometryType>(i), geometry_count[i] + offset);
-        for (int j = offset; j < geometry_count[i] + offset; ++j)
-        {
-            auto render_node_indx = render_nodes[i][j - offset];
-            auto& render_node = dc->nodes[render_node_indx];
-            auto _Geometry = reinterpret_cast<Geometry*>(
-                reinterpret_cast<char*>(dc->geometrie_pools[i]) +
-                j * geometry_size(_GeometryType));
-            build_geometry(_GeometryType, _Geometry);
-            render_node.local_geometry->clone(_Geometry);
-            _Geometry->id = geometry_index;
-            dc->geometry_2_node[_Geometry->id] = &render_node;
-            dc->geometries[geometry_index] = _Geometry;
-            _Geometry->transform(render_node.model_matrix);
-            render_node.transform_geometry = _Geometry;
-            geometry_index++;
-        }
-    }
-
+    int mesh_tri_count = dc->get_mesh_tri_count();
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(job_group,
                           0,
@@ -214,7 +197,7 @@ void GPU::process_primitives(DrawCallContext* dc)
                           default_complete);
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);
-    if (dc->setting.build_bvh && dc->bvh_tree == nullptr)
+    if (dc->setting.enable_global_path_trace || (dc->setting.build_bvh && dc->bvh_tree == nullptr))
     {
         wait_finish();
         build_bvh_tree(dc);
@@ -224,19 +207,7 @@ void GPU::process_primitives(DrawCallContext* dc)
 
 void GPU::run_vert_shader(DrawCallContext* dc)
 {
-    int vert_count = 0;
-    for (int i = 0; i < dc->meshes.size(); ++i)
-    {
-        auto mesh = dc->meshes[i];
-        vert_count += mesh->vert_count;
-    }
-    if (vert_count != dc->gl_position_count)
-    {
-        dc->gl_position_count = vert_count;
-        free(dc->gl_positions);
-        dc->gl_positions = static_cast<L_MATH::Vec<float, 4>*>(malloc(sizeof(Vec4) * vert_count));
-        dc->outputs = static_cast<VertexOutput*>(malloc(sizeof(VertexOutput) * vert_count));
-    }
+    int vert_count = dc->get_mesh_vert_count();
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(job_group,
                           0,
@@ -265,14 +236,14 @@ int GPU::ray_cast_scene(DrawCallContext* dc,int msaa_index)
 int GPU::raster_scene(DrawCallContext* dc,int msaa_index)
 {
     auto data = new std::tuple<DrawCallContext*, int>(dc, msaa_index);
-    auto tri_count = dc->geometries.size();
+    auto tri_count = dc->geometry_count[TRI];
     if (tri_count == 0)
     {
         return 0;
     }
     auto job_group = JOB_SYSTEM.create_job_group(frame_cur_max_job_id);
     JOB_SYSTEM.alloc_jobs(job_group, 0,
-                          0, dc->geometries.size(),
+                          0, tri_count,
                           data, rast_tri_execute, rast_tri_complete);
     JOB_SYSTEM.submit_job_group(job_group);
     update_frame_job_id(job_group);
@@ -331,9 +302,9 @@ void GPU::clear_depth(DrawCallContext* draw_call_context)
 }
 
 
-
 void GPU::run(GPUCmds& cmd)
 {
+    prepare_ctx(&cmd.context);
     for (auto cmd_type : cmd.cmd_types)
     {
         if (cmd_type==DRAW)

@@ -42,9 +42,10 @@ void invert_view_transform(DrawCallContext* draw_call_context, int msaa_index, i
 
 bool add_fragment(TrianglePrimitive& tri,DrawCallContext* ctx,int msaa_index,const L_MATH::Vec<float, 3>& alpha, int i, int j);
 
-bool ray_caster(DrawCallContext* ctx,  float si, float sj, RayCasterResult* result);
-bool ray_caster_bvh(DrawCallContext* ctx,BVHTree* tree, float si, float sj, RayCasterResult* result);
-bool ray_caster_bvh_priqueue(DrawCallContext* ctx, BVHTree* tree, float si, float sj, RayCasterResult* result);
+// bool ray_caster_bvh_priqueue(DrawCallContext* ctx, BVHTree* tree, float si, float sj, RayCasterResult* result);
+bool ray_caster_bvh(DrawCallContext* ctx, BVHTree* bvh_tree, const Vec3& origin, const Vec3& dir,
+                    RayCasterResult& result);
+bool ray_caster(DrawCallContext* draw_call,const Vec3& origin,const Vec3& dir, RayCasterResult& result);
 
 void rast_tri(TrianglePrimitive& tri, DrawCallContext* ctx,int msaa_index);
 void rast_huge_tri(TrianglePrimitive& tri, DrawCallContext* ctx);
@@ -86,6 +87,7 @@ void mid_filter_complete(std::size_t data_begin,std::size_t data_end, void* glob
 void run_process_tri_primitive(std::size_t data_begin,std::size_t data_end, void* global_data);
 
 
+void prepare_ctx_execute(std::size_t data_begin, std::size_t data_end, void* global_data);
 
 
 

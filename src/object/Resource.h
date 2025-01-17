@@ -31,7 +31,7 @@ public:
     static SHARE_PTR<T> get_or_create_default_resource(Args&&... args);
 
     template<class  T>
-    static SHARE_PTR<T> copy_resource(SHARE_PTR<T>& resource);
+    static SHARE_PTR<T> copy_resource(const SHARE_PTR<T>& resource);
 
     template<class  T>
     static SHARE_PTR<T> get_resource(int id);
@@ -88,7 +88,7 @@ std::shared_ptr<T> Resource::get_or_create_default_resource(Args&&... args)
 }
 
 template <class T>
-std::shared_ptr<T> Resource::copy_resource(std::shared_ptr<T>& resource)
+std::shared_ptr<T> Resource::copy_resource(const std::shared_ptr<T>& resource)
 {
     return TypeFactory::copy_share_ptr_object(resource.get(), destroy_resource);
 }
